@@ -1,12 +1,13 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
-  <groupId>de.robingrether.idisguise</groupId>
+  <groupId>de.luisagrether.idisguise</groupId>
   <artifactId>idisguise</artifactId>
   <version>6.0.1-SNAPSHOT</version>
   <name>iDisguise</name>
   <description>Recode of the famous iDisguse plugin!</description>
   
   <properties>
+	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   	<maven.build.timestamp.format>yyyy_MM_dd-HH_mm_ss</maven.build.timestamp.format>
   </properties>
   
@@ -15,9 +16,9 @@
   		<id>spigot-repo</id>
   		<url>https://hub.spigotmc.org/nexus/content/repositories/snapshots/</url>
   	</repository>
-  	<repository>
-  		<id>robingrether-repo</id>
-  		<url>https://www.robingrether.de/mc/repo/</url>
+	<repository>
+  		<id>codemc-repo</id>
+  		<url>https://repo.codemc.org/repository/maven-public/</url>
   	</repository>
   </repositories>
   
@@ -25,13 +26,115 @@
   	<dependency>
   		<groupId>org.spigotmc</groupId>
   		<artifactId>spigot-api</artifactId>
-  		<version>1.18.1-R0.1-SNAPSHOT</version>
+  		<version>1.18.2-R0.1-SNAPSHOT</version>
   		<scope>provided</scope>
   	</dependency>
-  	<dependency>
-  		<groupId>de.robingrether.util</groupId>
-  		<artifactId>utility</artifactId>
-  		<version>1.0.4</version>
+	<dependency>
+		<groupId>com.googlecode.json-simple</groupId>
+		<artifactId>json-simple</artifactId>
+		<version>1.1.1</version>
+		<scope>provided</scope>
+	</dependency>
+	<dependency>
+  		<groupId>org.bstats</groupId>
+  		<artifactId>bstats-bukkit</artifactId>
+  		<version>1.4</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_17_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_16_R3</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_16_R2</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_16_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_15_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_14_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_13_R2</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_13_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_12_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_11_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_10_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_9_R2</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_9_R1</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_8_R3</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_8_R2</artifactId>
+  		<version>${project.version}</version>
+  		<scope>compile</scope>
+  	</dependency>
+	<dependency>
+  		<groupId>de.luisagrether.idisguise</groupId>
+  		<artifactId>idisguise-impl-v1_8_R1</artifactId>
+  		<version>${project.version}</version>
   		<scope>compile</scope>
   	</dependency>
   </dependencies>
@@ -45,45 +148,32 @@
   	</resources>
   	<plugins>
   		<plugin>
+			<groupId>org.apache.maven.plugins</groupId>
         	<artifactId>maven-compiler-plugin</artifactId>
-        	<version>3.1</version>
+        	<version>3.11.0</version>
         	<configuration>
         		<source>1.8</source>
         		<target>1.8</target>
+				<verbose>true</verbose>
+				<fork>true</fork>
+				<executable>${JAVA_8_HOME}/bin/javac</executable>
         	</configuration>
         </plugin>
-        <plugin>
-        	<artifactId>maven-assembly-plugin</artifactId>
-        	<executions>
-        		<execution>
-        			<phase>package</phase>
-        			<goals>
-        				<goal>single</goal>
-        			</goals>
-        		</execution>
-        	</executions>
-        	<configuration>
-        		<descriptorRefs>
-        			<descriptorRef>jar-with-dependencies</descriptorRef>
-        		</descriptorRefs>
-        		<finalName>idisguise-${project.version}</finalName>
-        		<appendAssemblyId>false</appendAssemblyId>
-        	</configuration>
-        </plugin>
-  		<plugin>
+		<plugin>
   			<groupId>org.apache.maven.plugins</groupId>
   			<artifactId>maven-shade-plugin</artifactId>
-  			<version>2.3</version>
+  			<version>3.6.0</version>
   			<configuration>
   				<artifactSet>
   					<includes>
+						<include>de.luisagrether.idisguise:*</include>
   						<include>org.bstats:*</include>
   					</includes>
   				</artifactSet>
   				<relocations>
   					<relocation>
   						<pattern>org.bstats.bukkit</pattern>
-  						<shadedPattern>de.robingrether.idisguise.io.bstats</shadedPattern>
+  						<shadedPattern>de.luisagrether.idisguise.io.bstats</shadedPattern>
   					</relocation>
   				</relocations>
   			</configuration>
@@ -108,7 +198,7 @@
   
   <distributionManagement>
   	<repository>
-  		<id>robingrether-repository-ftp</id>
+  		<id>luisagrether-repository-ftp</id>
   		<url>sftp://ssh.strato.de/</url>
   	</repository>
   </distributionManagement>

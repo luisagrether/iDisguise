@@ -1,0 +1,58 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>de.luisagrether.idisguise</groupId>
+  <artifactId>idisguise-impl-v1_17_R1</artifactId>
+  <version>6.0.1-SNAPSHOT</version>
+  <name>iDisguise Implementation for v1_17_R1</name>
+  
+  <properties>
+	<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  	<maven.build.timestamp.format>yyyy_MM_dd-HH_mm_ss</maven.build.timestamp.format>
+  </properties>
+  
+  <dependencies>
+  	<dependency>
+  		<groupId>org.spigotmc</groupId>
+  		<artifactId>spigot</artifactId>
+  		<version>1.17.1-R0.1-SNAPSHOT</version>
+  		<scope>provided</scope>
+  	</dependency>
+  </dependencies>
+  
+  <build>
+  	<resources>
+  		<resource>
+  			<directory>src/main/resources</directory>
+  			<filtering>true</filtering>
+  		</resource>
+  	</resources>
+  	<plugins>
+  		<plugin>
+			<groupId>org.apache.maven.plugins</groupId>
+        	<artifactId>maven-compiler-plugin</artifactId>
+        	<version>3.11.0</version>
+        	<configuration>
+        		<source>17</source>
+        		<target>17</target>
+				<verbose>true</verbose>
+				<fork>true</fork>
+				<executable>${JAVA_17_HOME}/bin/javac</executable>
+        	</configuration>
+        </plugin>
+  	</plugins>
+  	<extensions>
+  		<extension>
+  			<groupId>org.apache.maven.wagon</groupId>
+  			<artifactId>wagon-ssh</artifactId>
+  			<version>3.1.0</version>
+  		</extension>
+  	</extensions>
+  </build>
+  
+  <distributionManagement>
+  	<repository>
+  		<id>luisagrether-repository-ftp</id>
+  		<url>sftp://ssh.strato.de/</url>
+  	</repository>
+  </distributionManagement>
+</project>

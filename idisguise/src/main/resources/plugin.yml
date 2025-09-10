@@ -1,12 +1,13 @@
 name: iDisguise
-main: de.robingrether.idisguise.iDisguise
+main: de.luisagrether.idisguise.iDisguise
 version: ${project.version}
 api-version: 1.13
-author: RobinGrether
-description: Disguise as a mob or other player
+author: LuisaGrether
+description: Disguise as a mob or other player.
 website: https://www.spigotmc.org/resources/idisguise.5509/
+loadbefore: [MinecraftTrainSimulator]
 commands:
    disguise:
-      description: Disguise as an entity!
+      description: Disguise as a mob or other player.
    undisguise:
-      description: Undisguise!
+      description: Undisguise.

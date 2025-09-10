@@ -1,0 +1,27 @@
+# Options affecting the basic behavior of iDisguise (including the developer API)
+disguise:
+   
+   # Blacklist of disguise types:
+   # Default ones are unsupported, add anyone if you would like to disable it
+   disguise-type-blacklist: DISGUISE_TYPE_BLACKLIST
+   
+# Options affecting the commands and permissions of iDisguise (these do NOT affect the developer API)
+commands:
+
+   # Whitelist of statements to alter the disguises:
+   # add/remove anyone if you would like to enable/disable it
+   statement-whitelist: STATEMENT_WHITELIST
+
+   # Do we use permission nodes?
+   # if true: require permission node 'iDisguise.disguise.<ENTITYTYPE>' or 'iDisguise.disguise.*' to disguise
+   # if false: only server operators can disguise
+   use-permission-nodes: USE_PERMISSION_NODES
+
+# Options affecting the update checking feature
+updates:
+   
+   # Check whether an update is available at every server start
+   check: UPDATE_CHECK
+   
+   # Automatically download new updates
+   download: UPDATE_DOWNLOAD

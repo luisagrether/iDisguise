@@ -1,0 +1,17 @@
+call mvn.cmd deploy -f idisguise-impl-v1_8_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_8_R2/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_8_R3/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_9_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_9_R2/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_10_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_11_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_12_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_13_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_13_R2/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_14_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_15_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_16_R1/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_16_R2/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_16_R3/pom.xml
+call mvn.cmd deploy -f idisguise-impl-v1_17_R1/pom.xml
+call mvn.cmd deploy -f idisguise/pom.xml
