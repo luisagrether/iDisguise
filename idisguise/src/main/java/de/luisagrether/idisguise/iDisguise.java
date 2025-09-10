@@ -39,7 +39,6 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.entity.EntityDamageEvent;
-import org.bukkit.event.entity.EntityDamageEvent.DamageCause;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
@@ -57,7 +56,6 @@ import de.luisagrether.idisguise.api.DisguiseAPI;
 import de.luisagrether.idisguise.io.Config;
 import de.luisagrether.idisguise.io.Language;
 import de.luisagrether.idisguise.io.UpdateCheck;
-import de.luisagrether.util.ObjectUtil;
 import de.luisagrether.util.StringUtil;
 
 public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
@@ -72,6 +70,10 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private static boolean LEGACY_INJECTION = false;
 	private static Method LegacyInjector_inject = null;
 	private static Method LegacyInjector_toggleIntercept = null;
+	private static boolean LEGACY_DISABLE_AI = false;
+	private static Method CraftEntity_getHandle = null;
+	private static Class<?> EntityInsentient = null;
+	private static Method EntityInsentient_setNoAI = null;
 	private static boolean PLAYER_DISGUISE_AVAILABLE = false;
 	private static boolean LEGACY_PROFILES = false;
 	private static boolean PLAYER_DISGUISE_VIEWSELF = false;
@@ -119,6 +121,22 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					LegacyInjector_toggleIntercept = LegacyInjector.getMethod("toggleIntercept", Entity.class, Player.class, boolean.class);
 				} catch(ClassNotFoundException|NoSuchMethodException e) {
 				}
+			}
+		}
+		try {
+			LivingEntity.class.getDeclaredMethod("setAI", boolean.class);
+			// everything fine
+		} catch(NoSuchMethodException e) {
+			try {
+				Class<?> CraftEntity = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.CraftEntity");
+				CraftEntity_getHandle = CraftEntity.getMethod("getHandle");
+				EntityInsentient = Class.forName("net.minecraft.server." + PACKAGE_VERSION + ".EntityInsentient");
+				EntityInsentient_setNoAI = EntityInsentient.getDeclaredMethod("k", boolean.class);
+				EntityInsentient_setNoAI.setAccessible(true);
+				LEGACY_DISABLE_AI = true;
+			} catch(ClassNotFoundException|NoSuchMethodException e2) {
+				LEGACY_INJECTION = true;
+				LegacyInjector_inject = null;
 			}
 		}
 		try {
@@ -217,6 +235,9 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 								UpdatePlayerInfo = clazz;
 								break;
 							}
+						}
+						if(UpdatePlayerInfo == null) {
+							UpdatePlayerInfo = Class.forName("net.minecraft.server." + PACKAGE_VERSION + ".EnumPlayerInfoAction");
 						}
 						PacketUpdatePlayerInfo_new = PacketUpdatePlayerInfo.getConstructor(UpdatePlayerInfo, Array.newInstance(EntityPlayer, 0).getClass());
 						UpdatePlayerInfo_ADD_PLAYER = UpdatePlayerInfo.getEnumConstants()[0];
@@ -584,9 +605,18 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 
 		Entity entity = player.getWorld().spawnEntity(player.getLocation(), type);
 		if(entity instanceof LivingEntity) {
-			((LivingEntity)entity).setAI(false);
-			//((LivingEntity)entity).setCollidable(false);
-			//player.setCollidable(false);
+			if(!LEGACY_DISABLE_AI) {
+				((LivingEntity)entity).setAI(false);
+			} else {
+				try {
+					Object nmsEntity = CraftEntity_getHandle.invoke(entity);
+					if(EntityInsentient.isInstance(nmsEntity)) {
+						EntityInsentient_setNoAI.invoke(nmsEntity, true);
+					}
+				} catch(Exception e) {
+					if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+				}
+			}
 		} else if(entity instanceof Item) {
 			((Item)entity).setPickupDelay(Integer.MAX_VALUE);
 		}
@@ -813,7 +843,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	@EventHandler
 	public void handleEntityDamage(EntityDamageEvent event) {
 		if(event.getEntity().hasMetadata("iDisguise")) {
-			if(ObjectUtil.equals(event.getCause(), DamageCause.FLY_INTO_WALL, DamageCause.SUFFOCATION)) {
+			if(StringUtil.equals(event.getCause().name(), "FLY_INTO_WALL", "SUFFOCATION")) {
 				event.setCancelled(true);
 			} else {
 				Bukkit.getPlayer((UUID)event.getEntity().getMetadata("iDisguise").get(0).value()).damage(event.getDamage());
