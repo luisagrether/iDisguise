@@ -25,6 +25,7 @@ import javax.annotation.Nullable;
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
@@ -38,10 +39,17 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.entity.EntityCombustByBlockEvent;
+import org.bukkit.event.entity.EntityCombustByEntityEvent;
+import org.bukkit.event.entity.EntityCombustEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
+import org.bukkit.event.entity.EntityTargetEvent;
+import org.bukkit.event.player.PlayerInteractEntityEvent;
 import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
@@ -53,6 +61,11 @@ import org.bukkit.potion.PotionEffectType;
 import com.google.common.collect.Multimap;
 
 import de.luisagrether.idisguise.api.DisguiseAPI;
+import de.luisagrether.idisguise.api.EventCancelledException;
+import de.luisagrether.idisguise.api.PlayerDisguiseAsPlayerEvent;
+import de.luisagrether.idisguise.api.PlayerDisguiseEvent;
+import de.luisagrether.idisguise.api.PlayerInteractDisguisedPlayerEvent;
+import de.luisagrether.idisguise.api.PlayerUndisguiseEvent;
 import de.luisagrether.idisguise.io.Config;
 import de.luisagrether.idisguise.io.Language;
 import de.luisagrether.idisguise.io.UpdateCheck;
@@ -63,6 +76,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	public static final Pattern INT_VAL = Pattern.compile("[+-]?[0-9]+");
 	public static final Pattern DOUBLE_VAL = Pattern.compile("[+-]?[0-9]*\\.[0-9]+");
 	public static final Pattern ENUM_VAL = Pattern.compile("(?:([A-Za-z0-9.]+)\\.){0,1}([A-Za-z0-9_]+)");
+	public static final Pattern ITEMSTACK_VAL = Pattern.compile("([A-Za-z0-9_]+),([0-9]+)");
 	public static final Pattern STRING_VAL = Pattern.compile("\".*\"");
 	public static final Pattern ACCOUNTNAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
 	private static String PACKAGE_VERSION;
@@ -294,7 +308,10 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			List<String> completions = new ArrayList<>();
 			for(String methodName : config.STATEMENT_WHITELIST) {
 				try {
-					Class<?> currentLevel = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.Craft" + type.getEntityClass().getSimpleName());
+					String clazzName = type.getEntityClass().getSimpleName();
+					if(clazzName.contains("Minecart")) clazzName = "Minecart";
+					if(clazzName.equals("ZombieVillager")) clazzName = "VillagerZombie";
+					Class<?> currentLevel = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.Craft" + clazzName);
 					outerloop: while(currentLevel != Object.class) {
 						for(Method method : currentLevel.getDeclaredMethods()) {
 							if(method.getName().equals(methodName) && method.getParameterTypes().length <= 1) {
@@ -307,6 +324,25 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 									completions.add(methodName + "(<int>)");
 								} else if(method.getParameterTypes()[0] == double.class || method.getParameterTypes()[0] == float.class) {
 									completions.add(methodName + "(<float>)");
+								} else if(method.getParameterTypes()[0] == ItemStack.class) {
+									try {
+										Method name = Enum.class.getDeclaredMethod("name");
+										for(Material value : Material.class.getEnumConstants()) {
+											completions.add(methodName + "(" + name.invoke(value) + ")");
+											completions.add(methodName + "(" + name.invoke(value) + ",<int>)");
+										}
+									} catch(Exception e) {
+									}
+								} else if(method.getParameterTypes()[0] == MaterialData.class) {
+									try {
+										Method name = Enum.class.getDeclaredMethod("name");
+										for(Material value : Material.class.getEnumConstants()) {
+											if(value.isBlock()) {
+												completions.add(methodName + "(" + name.invoke(value) + ")");
+											}
+										}
+									} catch(Exception e) {
+									}
 								} else if(method.getParameterTypes()[0].isEnum()) {
 									try {
 										Method name = Enum.class.getDeclaredMethod("name");
@@ -324,6 +360,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 						currentLevel = currentLevel.getSuperclass();										
 					}
 				} catch(ClassNotFoundException e) {
+					if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
 				}
 			}
 
@@ -424,13 +461,17 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				} else if(!ACCOUNTNAME.matcher(args[1]).matches()) {
 					sender.sendMessage(language.PLAYER_DISGUISE_ACCOUNT_NAME_INVALID);
 				} else {
-					disguiseAsPlayer((Player)sender, args[1], (success) -> {
-						if(success) {
-							sender.sendMessage(language.DISGUISED_SUCCESSFULLY);
-						} else {
-							sender.sendMessage(language.DISGUISE_ERROR);
-						}
-					});
+					try {
+						disguiseAsPlayer((Player)sender, args[1], (success) -> {
+							if(success) {
+								sender.sendMessage(language.DISGUISED_SUCCESSFULLY);
+							} else {
+								sender.sendMessage(language.DISGUISE_ERROR);
+							}
+						});
+					} catch(EventCancelledException e) {
+						sender.sendMessage(language.DISGUISE_EVENT_CANCELLED);
+					}
 				}
 			} else {
 				try {
@@ -440,85 +481,110 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					} else if(!hasPermission((Player)sender, EntityType.PLAYER)) {
 						sender.sendMessage(language.DISGUISE_NO_PERMISSION);
 					} else {
-						Entity entity = disguise((Player)sender, type);
-						for(int i = 1; i < args.length; i++) {
-							String codeLine = args[i];
-							String[] codeFrags = codeLine.split("[()]", -1);
-							if(config.STATEMENT_WHITELIST.contains(codeFrags[0])) {
-								Statement statement = null;
-								Matcher m;
-								if(codeFrags[1].length() == 0) {
-									statement = new Statement(entity, codeFrags[0], new Object[0]);
-								} else if(codeFrags[1].equals("true")) {
-									statement = new Statement(entity, codeFrags[0], new Object[] {true});
-								} else if(codeFrags[1].equals("false")) {
-									statement = new Statement(entity, codeFrags[0], new Object[] {false});
-								} else if(INT_VAL.matcher(codeFrags[1]).matches()) {
-									statement = new Statement(entity, codeFrags[0], new Object[] {Integer.valueOf(codeFrags[1])});
-								} else if(DOUBLE_VAL.matcher(codeFrags[1]).matches()) {
-									statement = new Statement(entity, codeFrags[0], new Object[] {Double.valueOf(codeFrags[1])});
-								} else if((m = ENUM_VAL.matcher(codeFrags[1])).matches()) {
-									Class<?> enumClazz = null;
-									if(m.group(1) == null || m.group(1).isEmpty()) {
-										Class<?> currentLevel = entity.getClass();
-										outerloop: while(true) {
-											for(Method method : currentLevel.getDeclaredMethods()) {
-												if(method.getName().equals(codeFrags[0]) && method.getParameterTypes().length == 1) {
-													enumClazz = method.getParameterTypes()[0];
-													break outerloop;
+						try {
+							Entity entity = disguise((Player)sender, type);
+							for(int i = 1; i < args.length; i++) {
+								String codeLine = args[i];
+								String[] codeFrags = codeLine.split("[()]", -1);
+								if(config.STATEMENT_WHITELIST.contains(codeFrags[0])) {
+									Statement statement = null;
+									Matcher m;
+									if(codeFrags[1].length() == 0) {
+										statement = new Statement(entity, codeFrags[0], new Object[0]);
+									} else if(codeFrags[1].equals("true")) {
+										statement = new Statement(entity, codeFrags[0], new Object[] {true});
+									} else if(codeFrags[1].equals("false")) {
+										statement = new Statement(entity, codeFrags[0], new Object[] {false});
+									} else if(INT_VAL.matcher(codeFrags[1]).matches()) {
+										statement = new Statement(entity, codeFrags[0], new Object[] {Integer.valueOf(codeFrags[1])});
+									} else if(DOUBLE_VAL.matcher(codeFrags[1]).matches()) {
+										statement = new Statement(entity, codeFrags[0], new Object[] {Double.valueOf(codeFrags[1])});
+									} else if((m = ENUM_VAL.matcher(codeFrags[1])).matches()) {
+										Class<?> enumClazz = null;
+										if(m.group(1) == null || m.group(1).isEmpty()) {
+											Class<?> currentLevel = entity.getClass();
+											outerloop: while(true) {
+												for(Method method : currentLevel.getDeclaredMethods()) {
+													if(method.getName().equals(codeFrags[0]) && method.getParameterTypes().length == 1) {
+														enumClazz = method.getParameterTypes()[0];
+														break outerloop;
+													}
 												}
+												if(currentLevel == Entity.class) break outerloop;
+												currentLevel = currentLevel.getSuperclass();										
 											}
-											if(currentLevel == Entity.class) break outerloop;
-											currentLevel = currentLevel.getSuperclass();										
-										}
-									} else {
-										try {
-											enumClazz = Class.forName(m.group(1));
-										} catch(ClassNotFoundException e) {
+										} else {
 											try {
-												enumClazz = Class.forName("org.bukkit.entity." + m.group(1));
-											} catch(ClassNotFoundException e2) {
-												for(Class<?> innerClazz : entity.getClass().getInterfaces()[0].getDeclaredClasses()) {
-													if(innerClazz.getSimpleName().equalsIgnoreCase(m.group(1))) {
-														enumClazz = innerClazz;
-														break;
+												enumClazz = Class.forName(m.group(1));
+											} catch(ClassNotFoundException e) {
+												try {
+													enumClazz = Class.forName("org.bukkit.entity." + m.group(1));
+												} catch(ClassNotFoundException e2) {
+													for(Class<?> innerClazz : entity.getClass().getInterfaces()[0].getDeclaredClasses()) {
+														if(innerClazz.getSimpleName().equalsIgnoreCase(m.group(1))) {
+															enumClazz = innerClazz;
+															break;
+														}
 													}
-												}
-												if(enumClazz == null) {
-													try {
-														enumClazz = Class.forName("org.bukkit." + m.group(1));
-													} catch(ClassNotFoundException e3) {
+													if(enumClazz == null) {
+														try {
+															enumClazz = Class.forName("org.bukkit." + m.group(1));
+														} catch(ClassNotFoundException e3) {
+														}
 													}
 												}
 											}
 										}
-									}
-									if(enumClazz != null) {
+										if(enumClazz == MaterialData.class) {
+											try {
+												statement = new Statement(entity, codeFrags[0], new Object[] {new MaterialData((Material)Material.class.getDeclaredField(m.group(2)).get(null))});
+											} catch(NoSuchFieldException|IllegalAccessException e) {
+												sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
+												if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+											}
+										} else if(enumClazz == ItemStack.class) {
+											try {
+												statement = new Statement(entity, codeFrags[0], new Object[] {new ItemStack((Material)Material.class.getDeclaredField(m.group(2)).get(null))});
+											} catch(NoSuchFieldException|IllegalAccessException e) {
+												sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
+												if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+											}
+										} else if(enumClazz != null) {
+											try {
+												statement = new Statement(entity, codeFrags[0], new Object[] {enumClazz.getDeclaredField(m.group(2)).get(null)});
+											} catch(NoSuchFieldException|IllegalAccessException e) {
+												sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
+												if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+											}
+										} else {
+											sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
+										}
+									} else if((m = ITEMSTACK_VAL.matcher(codeFrags[1])).matches()) {
 										try {
-											statement = new Statement(entity, codeFrags[0], new Object[] {enumClazz.getDeclaredField(m.group(2)).get(null)});
+											statement = new Statement(entity, codeFrags[0], new Object[] {new ItemStack((Material)Material.class.getDeclaredField(m.group(1)).get(null), Integer.parseInt(m.group(2)))});
 										} catch(NoSuchFieldException|IllegalAccessException e) {
 											sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
 											if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
 										}
-									} else {
-										sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
+									} else if(STRING_VAL.matcher(codeFrags[1]).matches()) {
+										statement = new Statement(entity, codeFrags[0], new Object[] {codeFrags[1].substring(1, codeFrags[1].length() - 1)});
 									}
-								} else if(STRING_VAL.matcher(codeFrags[1]).matches()) {
-									statement = new Statement(entity, codeFrags[0], new Object[] {codeFrags[1].substring(1, codeFrags[1].length() - 1)});
-								}
-								if(statement != null) {
-									try {
-										statement.execute();
-									} catch (Exception e) {
-										sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
-										if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+									if(statement != null) {
+										try {
+											statement.execute();
+										} catch (Exception e) {
+											sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
+											if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+										}
 									}
+								} else {
+									sender.sendMessage(language.DISGUISE_STATEMENT_FORBIDDEN.replace("%statement%", codeFrags[0]));
 								}
-							} else {
-								sender.sendMessage(language.DISGUISE_STATEMENT_FORBIDDEN.replace("%statement%", codeFrags[0]));
 							}
+							sender.sendMessage(language.DISGUISED_SUCCESSFULLY);
+						} catch(EventCancelledException e) {
+							sender.sendMessage(language.DISGUISE_EVENT_CANCELLED);
 						}
-						sender.sendMessage(language.DISGUISED_SUCCESSFULLY);
 					}
 				} catch(IllegalArgumentException e) {
 					if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
@@ -527,8 +593,12 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			}
 		} else if(command.getName().equalsIgnoreCase("undisguise")) {
 			if(isDisguised((Player)sender)) {
-				undisguise((Player)sender);
-				sender.sendMessage(language.UNDISGUISED_SUCCESSFULLY);
+				try {
+					undisguise((Player)sender);
+					sender.sendMessage(language.UNDISGUISED_SUCCESSFULLY);
+				} catch(EventCancelledException e) {
+					sender.sendMessage(language.UNDISGUISE_EVENT_CANCELLED);
+				}
 			} else {
 				sender.sendMessage(language.UNDISGUISE_NOT_DISGUISED);
 			}
@@ -597,13 +667,33 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		return disguiseMap.containsKey(player.getUniqueId()) || playerDisguiseMap.containsKey(player.getUniqueId());
 	}
 
-	public synchronized Entity disguise(Player player, EntityType type) {
+	public Entity disguise(Player player, EntityType type, boolean fireEvent) throws EventCancelledException {
 		if(config.DISGUISE_TYPE_BLACKLIST.contains(type.name())) throw new UnsupportedOperationException("Currently not supported!");
 		if(type == EntityType.PLAYER) throw new UnsupportedOperationException();
 		
-		if(isDisguised(player)) undisguise(player);
+		if(fireEvent) {
+			PlayerDisguiseEvent event = new PlayerDisguiseEvent(player, type);
+			Bukkit.getPluginManager().callEvent(event);
+			if(event.isCancelled()) {
+				throw new EventCancelledException();
+			}
+		}
 
-		Entity entity = player.getWorld().spawnEntity(player.getLocation(), type);
+		return disguise0(player, type);
+	}
+
+	private synchronized Entity disguise0(Player player, EntityType type) {
+		if(config.DISGUISE_TYPE_BLACKLIST.contains(type.name())) throw new UnsupportedOperationException("Currently not supported!");
+		if(type == EntityType.PLAYER) throw new UnsupportedOperationException();
+		
+		if(isDisguised(player)) undisguise0(player);
+
+		Entity entity;
+		if(type == EntityType.DROPPED_ITEM) {
+			entity = player.getWorld().dropItem(player.getLocation(), new ItemStack(Material.STONE));
+		} else {
+			entity = player.getWorld().spawnEntity(player.getLocation(), type);
+		}
 		if(entity instanceof LivingEntity) {
 			if(!LEGACY_DISABLE_AI) {
 				((LivingEntity)entity).setAI(false);
@@ -629,7 +719,12 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			}
 		}
 		player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 100, 1, true, false));
-		entity.teleport(player.getLocation());
+		if(type.name().equals("SHULKER")) {
+			Location to = player.getLocation();
+			entity.teleport(new Location(to.getWorld(), to.getBlockX()+0.5, to.getBlockY()+0.0, to.getBlockZ()+0.5));
+		} else {
+			entity.teleport(player.getLocation());
+		}
 		disguiseMap.put(player.getUniqueId(), entity);
 		for(Player observer : Bukkit.getOnlinePlayers()) {
 			if(observer != player) {
@@ -653,16 +748,31 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		return entity;
 	}
 
-	public void disguiseAsPlayer(Player player, String targetSkin, @Nullable Consumer<Boolean> callback) {
+	public void disguiseAsPlayer(Player player, String targetSkin, boolean fireEvent, @Nullable Consumer<Boolean> callback) throws EventCancelledException {
 		if(!PLAYER_DISGUISE_AVAILABLE || config.DISGUISE_TYPE_BLACKLIST.contains("PLAYER")) throw new UnsupportedOperationException("Currently not supported!");
 		if(!ACCOUNTNAME.matcher(targetSkin).matches()) throw new IllegalArgumentException("This account name is invalid.");
 		
-		if(isDisguised(player)) undisguise(player);
+		if(fireEvent) {
+			PlayerDisguiseAsPlayerEvent event = new PlayerDisguiseAsPlayerEvent(player, targetSkin);
+			Bukkit.getPluginManager().callEvent(event);
+			if(event.isCancelled()) {
+				throw new EventCancelledException();
+			}
+		}
+
+		disguiseAsPlayer0(player, targetSkin, callback);
+	}
+
+	private void disguiseAsPlayer0(Player player, String targetSkin, @Nullable Consumer<Boolean> callback) {
+		if(!PLAYER_DISGUISE_AVAILABLE || config.DISGUISE_TYPE_BLACKLIST.contains("PLAYER")) throw new UnsupportedOperationException("Currently not supported!");
+		if(!ACCOUNTNAME.matcher(targetSkin).matches()) throw new IllegalArgumentException("This account name is invalid.");
+		
+		if(isDisguised(player)) undisguise0(player);
 
 		if(!profileDatabase.containsKey(targetSkin.toLowerCase(Locale.ENGLISH))) {
 			retrieveProfile(targetSkin, (success) -> {
 				if(success) {
-					disguiseAsPlayer(player, targetSkin, callback);
+					disguiseAsPlayer0(player, targetSkin, callback);
 				} else {
 					callback.accept(false);
 				}
@@ -670,56 +780,58 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			return;
 		}
 
-		try {
-			Object targetProfile = CraftPlayer_getProfile.invoke(player);
-			Multimap sourceMap = (Multimap)GameProfile_getProperties.invoke(profileDatabase.get(targetSkin.toLowerCase(Locale.ENGLISH)));
-			Multimap targetMap = (Multimap)GameProfile_getProperties.invoke(targetProfile);
-			if(sourceMap.containsKey("textures")) {
-				if(targetMap.containsKey("textures")) {
-					targetMap.removeAll("textures");
+		synchronized(this) {
+			try {
+				Object targetProfile = CraftPlayer_getProfile.invoke(player);
+				Multimap sourceMap = (Multimap)GameProfile_getProperties.invoke(profileDatabase.get(targetSkin.toLowerCase(Locale.ENGLISH)));
+				Multimap targetMap = (Multimap)GameProfile_getProperties.invoke(targetProfile);
+				if(sourceMap.containsKey("textures")) {
+					if(targetMap.containsKey("textures")) {
+						targetMap.removeAll("textures");
+					}
+					targetMap.putAll("textures", sourceMap.get("textures"));
 				}
-				targetMap.putAll("textures", sourceMap.get("textures"));
-			}
-			
-			playerDisguiseMap.put(player.getUniqueId(), targetSkin);
-			for(Player observer : Bukkit.getOnlinePlayers()) {
-				if(observer != player) {
-					observer.hidePlayer(player);
+				
+				playerDisguiseMap.put(player.getUniqueId(), targetSkin);
+				for(Player observer : Bukkit.getOnlinePlayers()) {
+					if(observer != player) {
+						observer.hidePlayer(player);
+					}
 				}
-			}
-			for(Player observer : Bukkit.getOnlinePlayers()) {
-				if(observer != player) {
-					observer.showPlayer(player);
-				}
-			}
-
-			if(PLAYER_DISGUISE_VIEWSELF) {
-				Object entityPlayer = CraftPlayer_getHandle.invoke(player);
-				if(!LEGACY_PLAYER_DISGUISE_VIEWSELF) {
-					Object PacketRemovePlayerInfo = PacketRemovePlayerInfo_new.newInstance(Arrays.asList(player.getUniqueId()));
-					Object PacketUpdatePlayerInfo = PacketUpdatePlayerInfo_new.newInstance(UpdatePlayerInfo_ADD_PLAYER, entityPlayer);
-					Object playerConnection = EntityPlayer_playerConnection.get(entityPlayer);
-					PlayerConnection_sendPacket.invoke(playerConnection, PacketRemovePlayerInfo);
-					PlayerConnection_sendPacket.invoke(playerConnection, PacketUpdatePlayerInfo);
-				} else {
-					Object entityPlayerArray = Array.newInstance(EntityPlayer, 1);
-					Array.set(entityPlayerArray, 0, entityPlayer);
-					Object PacketRemovePlayerInfo = PacketUpdatePlayerInfo_new.newInstance(UpdatePlayerInfo_REMOVE_PLAYER, entityPlayerArray);
-					Object PacketUpdatePlayerInfo = PacketUpdatePlayerInfo_new.newInstance(UpdatePlayerInfo_ADD_PLAYER, entityPlayerArray);
-					Object playerConnection = EntityPlayer_playerConnection.get(entityPlayer);
-					PlayerConnection_sendPacket.invoke(playerConnection, PacketRemovePlayerInfo);
-					PlayerConnection_sendPacket.invoke(playerConnection, PacketUpdatePlayerInfo);
+				for(Player observer : Bukkit.getOnlinePlayers()) {
+					if(observer != player) {
+						observer.showPlayer(player);
+					}
 				}
 
-				Location originalLocation = player.getLocation();
-				player.teleport(dummyWorld.getSpawnLocation());
-				player.teleport(originalLocation);
-			}
+				if(PLAYER_DISGUISE_VIEWSELF) {
+					Object entityPlayer = CraftPlayer_getHandle.invoke(player);
+					if(!LEGACY_PLAYER_DISGUISE_VIEWSELF) {
+						Object PacketRemovePlayerInfo = PacketRemovePlayerInfo_new.newInstance(Arrays.asList(player.getUniqueId()));
+						Object PacketUpdatePlayerInfo = PacketUpdatePlayerInfo_new.newInstance(UpdatePlayerInfo_ADD_PLAYER, entityPlayer);
+						Object playerConnection = EntityPlayer_playerConnection.get(entityPlayer);
+						PlayerConnection_sendPacket.invoke(playerConnection, PacketRemovePlayerInfo);
+						PlayerConnection_sendPacket.invoke(playerConnection, PacketUpdatePlayerInfo);
+					} else {
+						Object entityPlayerArray = Array.newInstance(EntityPlayer, 1);
+						Array.set(entityPlayerArray, 0, entityPlayer);
+						Object PacketRemovePlayerInfo = PacketUpdatePlayerInfo_new.newInstance(UpdatePlayerInfo_REMOVE_PLAYER, entityPlayerArray);
+						Object PacketUpdatePlayerInfo = PacketUpdatePlayerInfo_new.newInstance(UpdatePlayerInfo_ADD_PLAYER, entityPlayerArray);
+						Object playerConnection = EntityPlayer_playerConnection.get(entityPlayer);
+						PlayerConnection_sendPacket.invoke(playerConnection, PacketRemovePlayerInfo);
+						PlayerConnection_sendPacket.invoke(playerConnection, PacketUpdatePlayerInfo);
+					}
 
-			if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
-		} catch(IllegalAccessException|InvocationTargetException|IllegalStateException|InstantiationException e) {
-			if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
-			if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+					Location originalLocation = player.getLocation();
+					player.teleport(dummyWorld.getSpawnLocation());
+					player.teleport(originalLocation);
+				}
+
+				if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
+			} catch(IllegalAccessException|InvocationTargetException|IllegalStateException|InstantiationException e) {
+				if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+				if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+			}
 		}
 	}
 
@@ -749,7 +861,21 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		});
 	}
 	
-	public synchronized EntityType undisguise(Player player) {
+	public EntityType undisguise(Player player, boolean fireEvent) throws EventCancelledException {
+		if(!isDisguised(player)) return null;
+
+		if(fireEvent) {
+			PlayerUndisguiseEvent event = new PlayerUndisguiseEvent(player);
+			Bukkit.getPluginManager().callEvent(event);
+			if(event.isCancelled()) {
+				throw new EventCancelledException();
+			}
+		}
+
+		return undisguise0(player);
+	}
+
+	private synchronized EntityType undisguise0(Player player) {
 		if(!isDisguised(player)) return null;
 		
 		if(getDisguise(player) == EntityType.PLAYER) {
@@ -829,18 +955,26 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	@EventHandler
 	public void handlePlayerQuit(PlayerQuitEvent event) {
 		if(isDisguised(event.getPlayer())) {
-			undisguise(event.getPlayer());
+			undisguise0(event.getPlayer());
 		}
 	}
 	
 	@EventHandler(priority = EventPriority.MONITOR)
 	public void handlePlayerMove(PlayerMoveEvent event) {
-		if(!event.isCancelled() && disguiseMap.containsKey(event.getPlayer().getUniqueId())) {
-			disguiseMap.get(event.getPlayer().getUniqueId()).teleport(event.getTo());
+		Player player = event.getPlayer();
+		if(!event.isCancelled() && disguiseMap.containsKey(player.getUniqueId())) {
+			Entity entity = disguiseMap.get(player.getUniqueId());
+			if(entity.getType().name().equals("SHULKER")) {
+				Location to = event.getTo();
+				entity.teleport(new Location(to.getWorld(), to.getBlockX()+0.5, to.getBlockY()+0.0, to.getBlockZ()+0.5));
+			} else {
+				entity.teleport(event.getTo());
+			}
+			entity.setVelocity(player.getVelocity());
 		}
 	}
 	
-	@EventHandler
+	@EventHandler(priority = EventPriority.MONITOR)
 	public void handleEntityDamage(EntityDamageEvent event) {
 		if(event.getEntity().hasMetadata("iDisguise")) {
 			if(StringUtil.equals(event.getCause().name(), "FLY_INTO_WALL", "SUFFOCATION")) {
@@ -849,6 +983,51 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				Bukkit.getPlayer((UUID)event.getEntity().getMetadata("iDisguise").get(0).value()).damage(event.getDamage());
 				event.setDamage(Double.MIN_VALUE);
 			}
+		}
+	}
+
+	@EventHandler(priority = EventPriority.LOWEST)
+	public void handlePlayerInteractEntity(PlayerInteractEntityEvent event) {
+		if(event.getRightClicked().hasMetadata("iDisguise")) {
+			event.setCancelled(true);
+			Bukkit.getScheduler().runTaskLater(this, () -> {
+				Bukkit.getPluginManager().callEvent(new PlayerInteractDisguisedPlayerEvent(
+					event.getPlayer(),
+					Bukkit.getPlayer((UUID)event.getRightClicked().getMetadata("iDisguise").get(0).value())
+				));
+			}, 1L);
+		} else if(event.getRightClicked() instanceof Player && playerDisguiseMap.containsKey(((Player)event.getRightClicked()).getUniqueId())) {
+			Bukkit.getScheduler().runTaskLater(this, () -> {
+				Bukkit.getPluginManager().callEvent(new PlayerInteractDisguisedPlayerEvent(
+					event.getPlayer(),
+					(Player)event.getRightClicked()
+				));
+			}, 1L);
+		}
+	}
+
+	@EventHandler(priority = EventPriority.LOWEST)
+	public void handleEntityCombustLowest(EntityCombustEvent event) {
+		if(event.getEntity().hasMetadata("iDisguise")) {
+			if(!(event instanceof EntityCombustByBlockEvent || event instanceof EntityCombustByEntityEvent)) {
+				event.setCancelled(true);
+			}
+		}
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void handleEntityCombustMonitor(EntityCombustEvent event) {
+		if(event.getEntity().hasMetadata("iDisguise")) {
+			if(!event.isCancelled()) {
+				Bukkit.getPlayer((UUID)event.getEntity().getMetadata("iDisguise").get(0).value()).setFireTicks(event.getDuration());
+			}
+		}
+	}
+
+	@EventHandler(priority = EventPriority.LOWEST)
+	public void handleEntityTarget(EntityTargetEvent event) {
+		if(event.getTarget().hasMetadata("iDisguise")) {
+			event.setCancelled(true);
 		}
 	}
 

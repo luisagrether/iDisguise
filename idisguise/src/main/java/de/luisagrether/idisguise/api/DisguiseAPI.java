@@ -43,9 +43,40 @@ public interface DisguiseAPI {
      * @param player the player
      * @param type the disguise type
 	 * @return the disguise entity, may be edited to alter the disguise appearance
+	 * @throws EventCancelledException if the <code>PlayerDisguiseEvent</code> fired is cancelled by another plugin
 	 * @throws UnsupportedOperationException if the given type is not supported
 	 */
-	public Entity disguise(Player player, EntityType type);
+	public default Entity disguise(Player player, EntityType type) throws EventCancelledException {
+		return disguise(player, type, true);
+	}
+
+	/**
+	 * Disguise a player as some non-human entity.
+	 * 
+	 * @since 6.0.1
+     * @param player the player
+     * @param type the disguise type
+	 * @param fireEvent whether a <code>PlayerDisguiseEvent</code> should be called
+	 * @return the disguise entity, may be edited to alter the disguise appearance
+	 * @throws EventCancelledException if the <code>PlayerDisguiseEvent</code> fired is cancelled by another plugin
+	 * @throws UnsupportedOperationException if the given type is not supported
+	 */
+	public Entity disguise(Player player, EntityType type, boolean fireEvent) throws EventCancelledException;
+
+	/**
+     * Disguise a player as another player.
+     * 
+     * @since 6.0.1
+	 * @param player the player
+     * @param targetSkin the target skin
+	 * @param callback is called after the operation is finished. <code>true</code> indicates success, <code>false</code> indicates that some error occurred
+     * @throws EventCancelledException if the <code>PlayerDisguiseAsPlayerEvent</code> fired is cancelled by another plugin
+	 * @throws IllegalArgumentException if the given target skin is not a valid Minecraft username
+	 * @throws UnsupportedOperationException if player disguise is not supported
+     */
+    public default void disguiseAsPlayer(Player player, String targetSkin, @Nullable Consumer<Boolean> callback) throws EventCancelledException {
+		disguiseAsPlayer(player, targetSkin, true, callback);
+	}
 
     /**
      * Disguise a player as another player.
@@ -53,19 +84,35 @@ public interface DisguiseAPI {
      * @since 6.0.1
 	 * @param player the player
      * @param targetSkin the target skin
-	 * @param callback is called after the operation is finished. <code>true</code> indicates success, <code>false</code> indicates that some error occurred.
-     * @throws IllegalArgumentException if the given target skin is not a valid Minecraft username
+	 * @param fireEvent whether a <code>PlayerDisguiseAsPlayerEvent</code> should be called
+	 * @param callback is called after the operation is finished. <code>true</code> indicates success, <code>false</code> indicates that some error occurred
+     * @throws EventCancelledException if the <code>PlayerDisguiseAsPlayerEvent</code> fired is cancelled by another plugin
+	 * @throws IllegalArgumentException if the given target skin is not a valid Minecraft username
 	 * @throws UnsupportedOperationException if player disguise is not supported
      */
-    public void disguiseAsPlayer(Player player, String targetSkin, @Nullable Consumer<Boolean> callback);
+    public void disguiseAsPlayer(Player player, String targetSkin, boolean fireEvent, @Nullable Consumer<Boolean> callback) throws EventCancelledException;
 	
 	/**
 	 * Undisguise a player.
 	 * 
 	 * @since 6.0.1
 	 * @param player the player
+	 * @throws EventCancelledException if the <code>PlayerUndisguiseEvent</code> fired is cancelled by another plugin
 	 * @return the disguise type before undisguising, or <code>null</code> if the player was not disguised
 	 */
-	public EntityType undisguise(Player player);
+	public default EntityType undisguise(Player player) throws EventCancelledException {
+		return undisguise(player, true);
+	}
+
+	/**
+	 * Undisguise a player.
+	 * 
+	 * @since 6.0.1
+	 * @param player the player
+	 * @param fireEvent whether a <code>PlayerUndisguiseEvent</code> should be called
+	 * @throws EventCancelledException if the <code>PlayerUndisguiseEvent</code> fired is cancelled by another plugin
+	 * @return the disguise type before undisguising, or <code>null</code> if the player was not disguised
+	 */
+	public EntityType undisguise(Player player, boolean fireEvent) throws EventCancelledException;
 	
 }

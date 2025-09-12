@@ -22,6 +22,7 @@ public class Language {
     public String DISGUISE_TYPE_NOT_SUPPORTED = ChatColor.RED + "Currently not supported!";
     public String DISGUISE_TYPE_NOT_FOUND = ChatColor.RED + "Disguise type not found: %entityType%";
 	public String DISGUISE_NO_PERMISSION = ChatColor.RED + "You don't have permission.";
+	public String DISGUISE_EVENT_CANCELLED = ChatColor.RED + "Another plugin prevents you from disguising.";
     public String PLAYER_DISGUISE_ACCOUNT_NAME_MISSING = ChatColor.RED + "Please feed me an account name as well.";
     public String PLAYER_DISGUISE_ACCOUNT_NAME_INVALID = ChatColor.RED + "This account name is invalid.";
     public String DISGUISED_SUCCESSFULLY = ChatColor.GOLD + "Disguised successfully!";
@@ -30,6 +31,7 @@ public class Language {
     public String DISGUISE_STATEMENT_FORBIDDEN = ChatColor.RED + "This statement is forbidden: %statement%";
     public String UNDISGUISED_SUCCESSFULLY = ChatColor.GOLD + "Undisguised successfully!";
     public String UNDISGUISE_NOT_DISGUISED = ChatColor.RED + "You are not disguised.";
+	public String UNDISGUISE_EVENT_CANCELLED = ChatColor.RED + "Another plugin prevents you from undisguising.";
 
     public String UPDATE_AVAILABLE = ChatColor.GOLD + "[iDisguise] An update is available: %version%";
 	public String UPDATE_ALREADY_DOWNLOADED = ChatColor.GOLD + "[iDisguise] Update already downloaded. Restart the server to apply.";
