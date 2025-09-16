@@ -29,6 +29,7 @@ public class Language {
     public String DISGUISE_ERROR = ChatColor.RED + "Something went wrong with your disguise.";
     public String DISGUISE_STATEMENT_ERROR = ChatColor.RED + "Something went wrong with your additional statement: %statement%";
     public String DISGUISE_STATEMENT_FORBIDDEN = ChatColor.RED + "This statement is forbidden: %statement%";
+	public String DISGUISE_STATEMENT_UNKNOWN = ChatColor.RED + "This statement is unknown or uses invalid syntax: %statement%";
     public String UNDISGUISED_SUCCESSFULLY = ChatColor.GOLD + "Undisguised successfully!";
     public String UNDISGUISE_NOT_DISGUISED = ChatColor.RED + "You are not disguised.";
 	public String UNDISGUISE_EVENT_CANCELLED = ChatColor.RED + "Another plugin prevents you from undisguising.";

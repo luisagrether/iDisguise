@@ -49,7 +49,6 @@ import org.bukkit.event.player.PlayerJoinEvent;
 import org.bukkit.event.player.PlayerMoveEvent;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.material.MaterialData;
 import org.bukkit.metadata.FixedMetadataValue;
 import org.bukkit.permissions.Permission;
 import org.bukkit.permissions.PermissionDefault;
@@ -109,6 +108,11 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private static Constructor<?> PacketRemovePlayerInfo_new = null;
 	private static Object UpdatePlayerInfo_ADD_PLAYER = null;
 	private static Object UpdatePlayerInfo_REMOVE_PLAYER = null;
+	private static boolean LEGACY_MATERIALS = false;
+	private static Method Material_createBlockData = null;
+	private static Class<?> BlockData = null;
+	private static Class<?> MaterialData = null;
+	private static Constructor<?> MaterialData_new = null;
 
 	static {
 		PACKAGE_VERSION = Bukkit.getServer().getClass().getName();
@@ -163,54 +167,63 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			Class<?> CraftServer = Bukkit.getServer().getClass();
 			CraftServer_getServer = CraftServer.getMethod("getServer");
 			Class<?> MinecraftServer = CraftServer_getServer.getReturnType();
-			for(Method method : MinecraftServer.getDeclaredMethods()) {
+			for(Method method : MinecraftServer.getMethods()) {
 				if(method.getReturnType().getSimpleName().equals("MinecraftSessionService")) {
 					MinecraftServer_getMinecraftSessionService = method;
 					break;
 				}
 			}
-			if(MinecraftServer_getMinecraftSessionService != null) {
-				Class<?> MinecraftSessionService = MinecraftServer_getMinecraftSessionService.getReturnType();
-				for(Method method : MinecraftSessionService.getDeclaredMethods()) {
-					if(method.getName().equals("fetchProfile")) {
-						MinecraftSessionService_fetchProfile = method;
-						LEGACY_PROFILES = false;
-						break;
-					}
-					if(method.getName().equals("fillProfileProperties")) {
-						MinecraftSessionService_fillProfileProperties = method;
-						LEGACY_PROFILES = true;
-						break;
-					}
+			if(MinecraftServer_getMinecraftSessionService == null) throw new NoSuchMethodException("Method MinecraftServer.getMinecraftSessionService() not found.");
+			
+			Class<?> MinecraftSessionService = MinecraftServer_getMinecraftSessionService.getReturnType();
+			for(Method method : MinecraftSessionService.getMethods()) {
+				if(method.getName().equals("fetchProfile")) {
+					MinecraftSessionService_fetchProfile = method;
+					LEGACY_PROFILES = false;
+					break;
+				}
+				if(method.getName().equals("fillProfileProperties")) {
+					MinecraftSessionService_fillProfileProperties = method;
+					LEGACY_PROFILES = true;
+					break;
 				}
 			}
-			if(MinecraftSessionService_fetchProfile != null || MinecraftSessionService_fillProfileProperties != null) {
-				Class<?> GameProfile = null;
-				if(MinecraftSessionService_fetchProfile != null) {
-					Class<?> ProfileResult = MinecraftSessionService_fetchProfile.getReturnType();
-					ProfileResult_getProfile = ProfileResult.getMethod("profile");
-					GameProfile = ProfileResult_getProfile.getReturnType();
+			if(MinecraftSessionService_fetchProfile == null && MinecraftSessionService_fillProfileProperties == null) throw new NoSuchMethodException("Method MinecraftSessionService.fetchProfile() not found.");
+			
+			Class<?> GameProfile = null;
+			if(MinecraftSessionService_fetchProfile != null) {
+				Class<?> ProfileResult = MinecraftSessionService_fetchProfile.getReturnType();
+				ProfileResult_getProfile = ProfileResult.getMethod("profile");
+				GameProfile = ProfileResult_getProfile.getReturnType();
 
-				} else if(MinecraftSessionService_fillProfileProperties != null) {
-					GameProfile = MinecraftSessionService_fillProfileProperties.getReturnType();
-				}
-				GameProfile_new = GameProfile.getConstructor(UUID.class, String.class);
-				GameProfile_getProperties = GameProfile.getDeclaredMethod("getProperties");
-				PLAYER_DISGUISE_AVAILABLE = true;
+			} else if(MinecraftSessionService_fillProfileProperties != null) {
+				GameProfile = MinecraftSessionService_fillProfileProperties.getReturnType();
 			}
+			GameProfile_new = GameProfile.getConstructor(UUID.class, String.class);
+			GameProfile_getProperties = GameProfile.getDeclaredMethod("getProperties");
+			PLAYER_DISGUISE_AVAILABLE = true;
 		} catch(ClassNotFoundException|NoSuchFieldException|NoSuchMethodException e) {
 			e.printStackTrace();
 		}
 		try {
 			EntityPlayer = CraftPlayer_getHandle.getReturnType();
-			EntityPlayer_playerConnection = EntityPlayer.getField("playerConnection");
+			for(Field field : EntityPlayer.getFields()) {
+				if(field.getType().getSimpleName().equals("PlayerConnection")) {
+					EntityPlayer_playerConnection = field;
+					break;
+				}
+			}
+			if(EntityPlayer_playerConnection == null) throw new NoSuchFieldException("Field EntityPlayer.playerConnection not found.");
+
 			Class<?> PlayerConnection = EntityPlayer_playerConnection.getType();
-			for(Method method : PlayerConnection.getDeclaredMethods()) {
-				if(method.getName().equals("sendPacket")) {
+			for(Method method : PlayerConnection.getMethods()) {
+				if(StringUtil.equals(method.getName(), "sendPacket", "send") && method.getParameterTypes().length == 1 /*&& method.getParameterTypes()[0].getSimpleName().equals("Packet")*/) {
 					PlayerConnection_sendPacket = method;
 					break;
 				}
 			}
+			if(PlayerConnection_sendPacket == null) throw new NoSuchMethodException("Method PlayerConnection.sendPacket() not found.");
+
 			try {
 				Class<?> PacketRemovePlayerInfo = Class.forName("net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket");
 				PacketRemovePlayerInfo_new = PacketRemovePlayerInfo.getConstructor(List.class);
@@ -266,6 +279,18 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		} catch(NoSuchFieldException|NoSuchMethodException e) {
 			e.printStackTrace();
 		}
+		try {
+			Material_createBlockData = Material.class.getMethod("createBlockData");
+			BlockData = Material_createBlockData.getReturnType();
+		} catch(NoSuchMethodException e) {
+			System.out.println("Legacy Materials.");
+			LEGACY_MATERIALS = true;
+			try {
+				MaterialData = Class.forName("org.bukkit.material.MaterialData");
+				MaterialData_new = MaterialData.getConstructor(Material.class);
+			} catch(ClassNotFoundException|NoSuchMethodException e2) {
+			}
+		}
 	}
 	
 	private static iDisguise INSTANCE;
@@ -304,63 +329,79 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 
 		for(EntityType type : EntityType.values()) {
 			if(config.DISGUISE_TYPE_BLACKLIST.contains(type.name())) continue;
-
+			
 			List<String> completions = new ArrayList<>();
-			for(String methodName : config.STATEMENT_WHITELIST) {
-				try {
-					String clazzName = type.getEntityClass().getSimpleName();
-					if(clazzName.contains("Minecart")) clazzName = "Minecart";
-					if(clazzName.equals("ZombieVillager")) clazzName = "VillagerZombie";
-					Class<?> currentLevel = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.Craft" + clazzName);
-					outerloop: while(currentLevel != Object.class) {
-						for(Method method : currentLevel.getDeclaredMethods()) {
-							if(method.getName().equals(methodName) && method.getParameterTypes().length <= 1) {
-								if(method.getParameterTypes().length == 0) {
-									completions.add(methodName + "()");
-								} else if(method.getParameterTypes()[0] == boolean.class) {
-									completions.add(methodName + "(true)");
-									completions.add(methodName + "(false)");
-								} else if(method.getParameterTypes()[0] == int.class) {
-									completions.add(methodName + "(<int>)");
-								} else if(method.getParameterTypes()[0] == double.class || method.getParameterTypes()[0] == float.class) {
-									completions.add(methodName + "(<float>)");
-								} else if(method.getParameterTypes()[0] == ItemStack.class) {
-									try {
-										Method name = Enum.class.getDeclaredMethod("name");
-										for(Material value : Material.class.getEnumConstants()) {
-											completions.add(methodName + "(" + name.invoke(value) + ")");
-											completions.add(methodName + "(" + name.invoke(value) + ",<int>)");
-										}
-									} catch(Exception e) {
-									}
-								} else if(method.getParameterTypes()[0] == MaterialData.class) {
-									try {
-										Method name = Enum.class.getDeclaredMethod("name");
-										for(Material value : Material.class.getEnumConstants()) {
-											if(value.isBlock()) {
-												completions.add(methodName + "(" + name.invoke(value) + ")");
-											}
-										}
-									} catch(Exception e) {
-									}
-								} else if(method.getParameterTypes()[0].isEnum()) {
-									try {
-										Method name = Enum.class.getDeclaredMethod("name");
-										for(Object value : method.getParameterTypes()[0].getEnumConstants()) {
-											completions.add(methodName + "(" + name.invoke(value) + ")");
-										}
-									} catch(Exception e) {
-									}
-								} else if(method.getParameterTypes()[0] == String.class) {
-									completions.add(methodName + "(\"TEXT\")");
+
+			if(type == EntityType.PLAYER) {
+				completions.add("<ACCOUNT-NAME>");
+				completions.add("Notch");
+				completions.add("jeb_");
+				completions.add("Dinnerbone");
+				completions.add("LuisaGrether");
+			} else {
+				Class<?> clazz = type.getEntityClass();
+				for(Method method : clazz.getMethods()) {
+					String methodName = method.getName();
+					if(!config.STATEMENT_WHITELIST.contains(methodName)) continue;
+
+					if(!LEGACY_MATERIALS && methodName.equals("setDisplayBlock")) continue;
+					if(LEGACY_MATERIALS && methodName.equals("setDisplayBlockData")) continue;
+
+					if(method.isAnnotationPresent(Deprecated.class)) continue;
+
+					if(method.getParameterTypes().length == 0) {
+						completions.add(methodName + "()");
+					} else if(method.getParameterTypes().length == 1) {
+						if(method.getParameterTypes()[0] == boolean.class) {
+							completions.add(methodName + "(true)");
+							completions.add(methodName + "(false)");
+						} else if(method.getParameterTypes()[0] == int.class) {
+							completions.add(methodName + "(<int>)");
+						} else if(method.getParameterTypes()[0] == double.class || method.getParameterTypes()[0] == float.class) {
+							completions.add(methodName + "(<float>)");
+						} else if(method.getParameterTypes()[0] == ItemStack.class) {
+							try {
+								Method name = Enum.class.getDeclaredMethod("name");
+								for(Material value : Material.class.getEnumConstants()) {
+									completions.add(methodName + "(" + name.invoke(value) + ")");
+									completions.add(methodName + "(" + name.invoke(value) + ",<int>)");
 								}
-								break outerloop;
+							} catch(Exception e) {
+							}
+						} else if(method.getParameterTypes()[0] == (LEGACY_MATERIALS ? MaterialData : BlockData)) {
+							try {
+								Method name = Enum.class.getDeclaredMethod("name");
+								for(Material value : Material.class.getEnumConstants()) {
+									if(((String)name.invoke(value)).startsWith(Material.LEGACY_PREFIX)) continue;
+									if(value.isBlock()) {
+										completions.add(methodName + "(" + name.invoke(value) + ")");
+									}
+								}
+							} catch(Exception e) {
+							}
+						} else if(method.getParameterTypes()[0].isEnum()) {
+							try {
+								Method name = Enum.class.getDeclaredMethod("name");
+								for(Object value : method.getParameterTypes()[0].getEnumConstants()) {
+									completions.add(methodName + "(" + name.invoke(value) + ")");
+								}
+							} catch(Exception e) {
+							}
+						} else if(method.getParameterTypes()[0] == String.class) {
+							completions.add(methodName + "(\"YOUR TEXT\")");
+						} else {
+							try {
+								if(Class.forName("org.bukkit.util.OldEnum").isAssignableFrom(method.getParameterTypes()[0])) {
+									for(Field field : method.getParameterTypes()[0].getDeclaredFields()) {
+										if(field.getType().equals(method.getParameterTypes()[0])) {
+											completions.add(methodName + "(" + field.getName() + ")");
+										}
+									}
+								}
+							} catch(Exception e) {
 							}
 						}
-						currentLevel = currentLevel.getSuperclass();										
 					}
-				} catch(ClassNotFoundException e) {
-					if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
 				}
 			}
 
@@ -368,7 +409,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		}
 		Bukkit.getPluginManager().registerEvents(this, this);
 
-		if(PLAYER_DISGUISE_VIEWSELF) {
+		if(PLAYER_DISGUISE_AVAILABLE && PLAYER_DISGUISE_VIEWSELF) {
 			dummyWorld = Bukkit.getWorld("iDisguise-Dummy");
 			if(dummyWorld == null) {
 				dummyWorld = Bukkit.createWorld(WorldCreator.name("iDisguise-Dummy"));
@@ -418,6 +459,32 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			sender.sendMessage(language.CONSOLE_USE_COMMAND);
 			return true;
 		}
+
+		if(debugMode) {
+			for(int i = 0; i < args.length; i++) getLogger().info("args[" + i + "] = \"" + args[i] + "\"");
+		}
+		String argsJoined = String.join(" ", args);
+		List<String> argsSplit = new ArrayList<>();
+		int lastSplit = 0;
+		int index = 0;
+		boolean quotation = false;
+		while(index < argsJoined.length()) {
+			if(argsJoined.charAt(index) == ' ') {
+				if(!quotation) {
+					if(index != lastSplit) argsSplit.add(argsJoined.substring(lastSplit, index).replace("\\\"", "\""));
+					lastSplit = index + 1;
+				}
+			} else if(argsJoined.charAt(index) == '"' && (index == 0 || argsJoined.charAt(index - 1) != '\\')) {
+				quotation = !quotation;
+			}
+			index++;
+		}
+		if(index != lastSplit) argsSplit.add(argsJoined.substring(lastSplit, index));
+		args = argsSplit.toArray(new String[0]);
+		if(debugMode) {
+			for(int i = 0; i < args.length; i++) getLogger().info("new_args[" + i + "] = \"" + args[i] + "\"");
+		}
+
 		if(command.getName().equalsIgnoreCase("disguise")) {
 			if(args.length == 0) {
 				if(isDisguised((Player)sender)) {
@@ -502,16 +569,10 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 									} else if((m = ENUM_VAL.matcher(codeFrags[1])).matches()) {
 										Class<?> enumClazz = null;
 										if(m.group(1) == null || m.group(1).isEmpty()) {
-											Class<?> currentLevel = entity.getClass();
-											outerloop: while(true) {
-												for(Method method : currentLevel.getDeclaredMethods()) {
-													if(method.getName().equals(codeFrags[0]) && method.getParameterTypes().length == 1) {
-														enumClazz = method.getParameterTypes()[0];
-														break outerloop;
-													}
+											for(Method method : entity.getType().getEntityClass().getMethods()) {
+												if(method.getName().equals(codeFrags[0]) && method.getParameterTypes().length == 1) {
+													enumClazz = method.getParameterTypes()[0];
 												}
-												if(currentLevel == Entity.class) break outerloop;
-												currentLevel = currentLevel.getSuperclass();										
 											}
 										} else {
 											try {
@@ -520,7 +581,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 												try {
 													enumClazz = Class.forName("org.bukkit.entity." + m.group(1));
 												} catch(ClassNotFoundException e2) {
-													for(Class<?> innerClazz : entity.getClass().getInterfaces()[0].getDeclaredClasses()) {
+													for(Class<?> innerClazz : entity.getType().getEntityClass().getDeclaredClasses()) {
 														if(innerClazz.getSimpleName().equalsIgnoreCase(m.group(1))) {
 															enumClazz = innerClazz;
 															break;
@@ -535,10 +596,13 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 												}
 											}
 										}
-										if(enumClazz == MaterialData.class) {
+										if(enumClazz == (LEGACY_MATERIALS ? MaterialData : BlockData)) {
 											try {
-												statement = new Statement(entity, codeFrags[0], new Object[] {new MaterialData((Material)Material.class.getDeclaredField(m.group(2)).get(null))});
-											} catch(NoSuchFieldException|IllegalAccessException e) {
+												Material material = (Material)Material.class.getDeclaredField(m.group(2)).get(null);
+												statement = new Statement(entity, codeFrags[0], new Object[] {
+													LEGACY_MATERIALS ? MaterialData_new.newInstance(material) : Material_createBlockData.invoke(material)
+												});
+											} catch(NoSuchFieldException|IllegalAccessException|InstantiationException|InvocationTargetException e) {
 												sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
 												if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
 											}
@@ -572,10 +636,15 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 									if(statement != null) {
 										try {
 											statement.execute();
+											if(statement.getMethodName().equals("setCustomName")) {
+												new Statement(entity, "setCustomNameVisible", new Object[] {true}).execute();
+											}
 										} catch (Exception e) {
 											sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
 											if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
 										}
+									} else {
+										sender.sendMessage(language.DISGUISE_STATEMENT_UNKNOWN.replace("%statement%", codeLine));
 									}
 								} else {
 									sender.sendMessage(language.DISGUISE_STATEMENT_FORBIDDEN.replace("%statement%", codeFrags[0]));
@@ -611,34 +680,39 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		if(!(sender instanceof Player)) {
 			return completions;
 		}
-		if(args.length < 2) {
-			for(EntityType type : EntityType.values()) {
-				if(type.equals(EntityType.PLAYER) && !PLAYER_DISGUISE_AVAILABLE) continue;
-				if(!config.DISGUISE_TYPE_BLACKLIST.contains(type.name()) && hasPermission((Player)sender, type)) {
-					completions.add(type.name());
-				}
-			}
-			if(args.length > 0) {
-				for(int i = 0; i < completions.size(); i++) {
-					if(!StringUtil.startsWithIgnoreCase(completions.get(i), args[0].replace('_', '-'))) {
-						completions.remove(i);
-						i--;
+
+		if(command.getName().equalsIgnoreCase("disguise")) {
+			if(args.length < 2) {
+				for(EntityType type : EntityType.values()) {
+					if(type.equals(EntityType.PLAYER) && !PLAYER_DISGUISE_AVAILABLE) continue;
+					if(!config.DISGUISE_TYPE_BLACKLIST.contains(type.name()) && hasPermission((Player)sender, type)) {
+						completions.add(type.name());
 					}
 				}
-			}
-		} else {
-			try {
-				EntityType type = EntityType.valueOf(args[0].toUpperCase(Locale.ENGLISH).replace('-', '_'));
-				if(hasPermission((Player)sender, type) && tabCompletions.containsKey(type)) {
-					completions.addAll(tabCompletions.get(type));
-				}
-				for(int i = 0; i < completions.size(); i++) {
-					if(!completions.get(i).startsWith(args[args.length - 1])) {
-						completions.remove(i);
-						i--;
+				if(args.length > 0) {
+					for(int i = 0; i < completions.size(); i++) {
+						if(!StringUtil.startsWithIgnoreCase(completions.get(i), args[0].replace('-', '_'))) {
+							completions.remove(i);
+							i--;
+						}
 					}
 				}
-			} catch(IllegalArgumentException e) {
+			} else {
+				try {
+					EntityType type = EntityType.valueOf(args[0].toUpperCase(Locale.ENGLISH).replace('-', '_'));
+					if(hasPermission((Player)sender, type) && tabCompletions.containsKey(type)) {
+						if(!type.equals(EntityType.PLAYER) || args.length < 3) {
+							completions.addAll(tabCompletions.get(type));
+						}
+					}
+					for(int i = 0; i < completions.size(); i++) {
+						if(!completions.get(i).startsWith(args[args.length - 1])) {
+							completions.remove(i);
+							i--;
+						}
+					}
+				} catch(IllegalArgumentException e) {
+				}
 			}
 		}
 		return completions;
