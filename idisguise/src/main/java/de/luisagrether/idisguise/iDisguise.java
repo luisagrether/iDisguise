@@ -24,6 +24,7 @@ import javax.annotation.Nullable;
 
 import org.bstats.bukkit.Metrics;
 import org.bukkit.Bukkit;
+import org.bukkit.Color;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
@@ -36,12 +37,15 @@ import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Item;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
+import org.bukkit.entity.TNTPrimed;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
+import org.bukkit.event.block.EntityBlockFormEvent;
 import org.bukkit.event.entity.EntityCombustByBlockEvent;
 import org.bukkit.event.entity.EntityCombustByEntityEvent;
 import org.bukkit.event.entity.EntityCombustEvent;
+import org.bukkit.event.entity.EntityDamageByEntityEvent;
 import org.bukkit.event.entity.EntityDamageEvent;
 import org.bukkit.event.entity.EntityTargetEvent;
 import org.bukkit.event.player.PlayerInteractEntityEvent;
@@ -344,8 +348,8 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					String methodName = method.getName();
 					if(!config.STATEMENT_WHITELIST.contains(methodName)) continue;
 
-					if(!LEGACY_MATERIALS && methodName.equals("setDisplayBlock")) continue;
-					if(LEGACY_MATERIALS && methodName.equals("setDisplayBlockData")) continue;
+					if(!LEGACY_MATERIALS && StringUtil.equals(methodName, "setDisplayBlock", "setCarriedMaterial")) continue;
+					if(LEGACY_MATERIALS && StringUtil.equals(methodName, "setDisplayBlockData", "setCarriedBlock")) continue;
 
 					if(method.isAnnotationPresent(Deprecated.class)) continue;
 
@@ -379,6 +383,12 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 								}
 							} catch(Exception e) {
 							}
+						} else if(method.getParameterTypes()[0] == Color.class) {
+							for(Field field : Color.class.getDeclaredFields()) {
+								if(field.getType().equals(Color.class)) {
+									completions.add(methodName + "(" + field.getName() + ")");
+								}
+							}
 						} else if(method.getParameterTypes()[0].isEnum()) {
 							try {
 								Method name = Enum.class.getDeclaredMethod("name");
@@ -391,6 +401,16 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 							completions.add(methodName + "(\"YOUR TEXT\")");
 						} else {
 							try {
+								if(Class.forName("org.bukkit.Keyed").isAssignableFrom(method.getParameterTypes()[0])) {
+									for(Field field : method.getParameterTypes()[0].getDeclaredFields()) {
+										if(field.getType().equals(method.getParameterTypes()[0])) {
+											completions.add(methodName + "(" + field.getName() + ")");
+										}
+									}
+								}
+							} catch(ClassNotFoundException e) {
+							}
+							/*try {
 								if(Class.forName("org.bukkit.util.OldEnum").isAssignableFrom(method.getParameterTypes()[0])) {
 									for(Field field : method.getParameterTypes()[0].getDeclaredFields()) {
 										if(field.getType().equals(method.getParameterTypes()[0])) {
@@ -399,7 +419,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 									}
 								}
 							} catch(Exception e) {
-							}
+							}*/
 						}
 					}
 				}
@@ -638,6 +658,8 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 											statement.execute();
 											if(statement.getMethodName().equals("setCustomName")) {
 												new Statement(entity, "setCustomNameVisible", new Object[] {true}).execute();
+											} else if(statement.getMethodName().equals("setCollarColor")) {
+												new Statement(entity, "setTamed", new Object[] {true}).execute();
 											}
 										} catch (Exception e) {
 											sender.sendMessage(language.DISGUISE_STATEMENT_ERROR.replace("%statement%", codeLine));
@@ -783,6 +805,8 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			}
 		} else if(entity instanceof Item) {
 			((Item)entity).setPickupDelay(Integer.MAX_VALUE);
+		} else if(entity instanceof TNTPrimed) {
+			((TNTPrimed)entity).setFuseTicks(Integer.MAX_VALUE);
 		}
 		entity.setMetadata("iDisguise", new FixedMetadataValue(this, player.getUniqueId()));
 		if(LEGACY_INJECTION) {
@@ -1048,13 +1072,28 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		}
 	}
 	
-	@EventHandler(priority = EventPriority.MONITOR)
-	public void handleEntityDamage(EntityDamageEvent event) {
+	@EventHandler(priority = EventPriority.LOWEST)
+	public void handleEntityDamageLowest(EntityDamageEvent event) {
 		if(event.getEntity().hasMetadata("iDisguise")) {
-			if(StringUtil.equals(event.getCause().name(), "FLY_INTO_WALL", "SUFFOCATION")) {
+			if(StringUtil.equals(event.getCause().name(), "DROWNING", "DRYOUT", "FLY_INTO_WALL", "SUFFOCATION")) {
 				event.setCancelled(true);
-			} else {
-				Bukkit.getPlayer((UUID)event.getEntity().getMetadata("iDisguise").get(0).value()).damage(event.getDamage());
+			}
+		}
+		if(event instanceof EntityDamageByEntityEvent) {
+			EntityDamageByEntityEvent event2 = (EntityDamageByEntityEvent)event;
+			if(event2.getDamager().hasMetadata("iDisguise")) {
+				event.setCancelled(true);
+			}
+		}
+	}
+
+	@EventHandler(priority = EventPriority.MONITOR)
+	public void handleEntityDamageMonitor(EntityDamageEvent event) {
+		if(event.getEntity().hasMetadata("iDisguise")) {
+			if(!event.isCancelled()) {
+				Player player = Bukkit.getPlayer((UUID)event.getEntity().getMetadata("iDisguise").get(0).value());
+				player.damage(event.getDamage());
+				if(debugMode) getLogger().info("Dealt damage (" + event.getCause().name() + "," + event.getDamage() + ") to " + player.getName());
 				event.setDamage(Double.MIN_VALUE);
 			}
 		}
@@ -1100,7 +1139,14 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 
 	@EventHandler(priority = EventPriority.LOWEST)
 	public void handleEntityTarget(EntityTargetEvent event) {
-		if(event.getTarget().hasMetadata("iDisguise")) {
+		if(event.getTarget() != null && event.getTarget().hasMetadata("iDisguise")) {
+			event.setCancelled(true);
+		}
+	}
+
+	@EventHandler(priority = EventPriority.LOWEST)
+	public void handleEntityBlockForm(EntityBlockFormEvent event) {
+		if(event.getEntity().hasMetadata("iDisguise")) {
 			event.setCancelled(true);
 		}
 	}

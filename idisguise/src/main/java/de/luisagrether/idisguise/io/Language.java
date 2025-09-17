@@ -51,10 +51,12 @@ public class Language {
 		File languageFile = new File(plugin.getDataFolder(), "language.yml");
 		FileConfiguration fileConfiguration = YamlConfiguration.loadConfiguration(languageFile);
 		try {
-			int fileVersion = UpdateCheck.extractVersionNumber(fileConfiguration.getString("version", "iDisguise 6.0.1"));
+			int fileVersion = UpdateCheck.extractVersionNumber(fileConfiguration.getString("version", plugin.getNameAndVersion()));
 			for(Field field : getClass().getDeclaredFields()) {
 				if(field.getType().equals(String.class)) {
-					if((!field.isAnnotationPresent(LastUpdated.class) || field.getAnnotation(LastUpdated.class).value() <= fileVersion) && fileConfiguration.isString(field.getName().toLowerCase(Locale.ENGLISH).replace('_', '-'))) {
+					if(field.isAnnotationPresent(LastUpdated.class) && field.getAnnotation(LastUpdated.class).value() > fileVersion) continue;
+					
+					if(fileConfiguration.isString(field.getName().toLowerCase(Locale.ENGLISH).replace('_', '-'))) {
 						field.set(this, fileConfiguration.getString(field.getName().toLowerCase(Locale.ENGLISH).replace('_', '-')));
 					}
 				}

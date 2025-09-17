@@ -25,3 +25,6 @@ updates:
    
    # Automatically download new updates
    download: UPDATE_DOWNLOAD
+
+# For internal purposes only
+version: VERSION
