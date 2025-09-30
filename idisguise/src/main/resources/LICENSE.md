@@ -20,4 +20,4 @@ This repository contains third-party assets. These are **not covered by the abov
 - **bStats** — &copy; Bastian Oppermann  
   Files included in this repository: none  
   Files included in the JAR file:
-  - the package `de.luisagrether.idisguise.bstats.*`
+  - the package `de.luisagrether.idisguise.io.bstats.*`
