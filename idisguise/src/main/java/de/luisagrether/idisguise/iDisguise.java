@@ -15,6 +15,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import java.util.Map.Entry;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.Consumer;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
@@ -62,6 +64,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
+import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Multimap;
 
 import de.luisagrether.idisguise.api.DisguiseAPI;
@@ -88,24 +91,32 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private static boolean LEGACY_INJECTION = false;
 	private static Method LegacyInjector_inject = null;
 	private static Method LegacyInjector_toggleIntercept = null;
-	private static boolean LEGACY_DISABLE_AI = false;
 	private static Method CraftEntity_getHandle = null;
+	private static Method Entity_copyMetadataFrom = null;
+	private static boolean LEGACY_DISABLE_AI = false;
 	private static Class<?> EntityInsentient = null;
 	private static Method EntityInsentient_setNoAI = null;
 	private static boolean PLAYER_DISGUISE_AVAILABLE = false;
 	private static boolean LEGACY_PROFILES = false;
 	private static boolean PLAYER_DISGUISE_VIEWSELF = false;
 	private static boolean LEGACY_PLAYER_DISGUISE_VIEWSELF = false;
+	private static Method OfflinePlayer_getPlayerProfile = null;
+	private static Method PlayerProfile_isComplete = null;
+	private static Method PlayerProfile_update = null;
+	private static Method PlayerProfile_clone = null;
+	private static Method CraftPlayerProfile_buildGameProfile;
 	private static Field CraftOfflinePlayer_profile = null;
 	private static Method CraftPlayer_getHandle = null;
 	private static Method CraftPlayer_getProfile = null;
 	private static Method CraftServer_getServer = null;
 	private static Method MinecraftServer_getMinecraftSessionService = null;
-	private static Method MinecraftSessionService_fetchProfile = null;
+	//private static Method MinecraftSessionService_fetchProfile = null;
 	private static Method MinecraftSessionService_fillProfileProperties = null;
-	private static Method ProfileResult_getProfile = null;
+	//private static Method ProfileResult_getProfile = null;
 	private static Constructor<?> GameProfile_new = null;
 	private static Method GameProfile_getProperties = null;
+	private static Field PropertyMap_properties = null;
+	private static sun.misc.Unsafe UNSAFE = null;
 	private static Class<?> EntityPlayer = null;
 	private static Field EntityPlayer_playerConnection = null;
 	private static Method PlayerConnection_sendPacket = null;
@@ -150,69 +161,102 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					} catch(ClassNotFoundException|NoSuchMethodException e) {
 					}
 				}
-			}
-			try {
-				LivingEntity.class.getDeclaredMethod("setAI", boolean.class);
-				// everything fine
-			} catch(NoSuchMethodException e) {
 				try {
 					Class<?> CraftEntity = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.CraftEntity");
 					CraftEntity_getHandle = CraftEntity.getMethod("getHandle");
-					EntityInsentient = Class.forName("net.minecraft.server." + PACKAGE_VERSION + ".EntityInsentient");
-					EntityInsentient_setNoAI = EntityInsentient.getDeclaredMethod("k", boolean.class);
-					EntityInsentient_setNoAI.setAccessible(true);
-					LEGACY_DISABLE_AI = true;
-				} catch(ClassNotFoundException|NoSuchMethodException e2) {
-					LEGACY_INJECTION = true;
+					Class<?> Entity = CraftEntity_getHandle.getReturnType();
+					if(MINECRAFT_VERSION[1] == 17) {
+						Entity_copyMetadataFrom = Entity.getDeclaredMethod("t", Entity);
+					} else if(MINECRAFT_VERSION[1] >= 13) {
+						Entity_copyMetadataFrom = Entity.getDeclaredMethod("v", Entity);
+					} else if(MINECRAFT_VERSION[1] >= 9) {
+						Entity_copyMetadataFrom = Entity.getDeclaredMethod("a", Entity);
+					} else {
+						Entity_copyMetadataFrom = Entity.getDeclaredMethod("n", Entity);
+					}
+					Entity_copyMetadataFrom.setAccessible(true);
+				} catch(ClassNotFoundException|NoSuchMethodException e) {
 					LegacyInjector_inject = null;
+				}
+				try {
+					LivingEntity.class.getDeclaredMethod("setAI", boolean.class);
+					// everything fine
+				} catch(NoSuchMethodException e) {
+					try {
+						EntityInsentient = Class.forName("net.minecraft.server." + PACKAGE_VERSION + ".EntityInsentient");
+						EntityInsentient_setNoAI = EntityInsentient.getDeclaredMethod("k", boolean.class);
+						EntityInsentient_setNoAI.setAccessible(true);
+						LEGACY_DISABLE_AI = true;
+					} catch(ClassNotFoundException|NoSuchMethodException e2) {
+						LegacyInjector_inject = null;
+					}
 				}
 			}
 			try {
-				Class<?> CraftOfflinePlayer = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".CraftOfflinePlayer");
-				CraftOfflinePlayer_profile = CraftOfflinePlayer.getDeclaredField("profile");
-				CraftOfflinePlayer_profile.setAccessible(true);
 				Class<?> CraftPlayer = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.CraftPlayer");
 				CraftPlayer_getHandle = CraftPlayer.getMethod("getHandle");
 				CraftPlayer_getProfile = CraftPlayer.getMethod("getProfile");
-				Class<?> CraftServer = Bukkit.getServer().getClass();
-				CraftServer_getServer = CraftServer.getMethod("getServer");
-				Class<?> MinecraftServer = CraftServer_getServer.getReturnType();
-				for(Method method : MinecraftServer.getMethods()) {
-					if(method.getReturnType().getSimpleName().equals("MinecraftSessionService")) {
-						MinecraftServer_getMinecraftSessionService = method;
-						break;
-					}
-				}
-				if(MinecraftServer_getMinecraftSessionService == null) throw new NoSuchMethodException("Method MinecraftServer.getMinecraftSessionService() not found.");
-				
-				Class<?> MinecraftSessionService = MinecraftServer_getMinecraftSessionService.getReturnType();
-				for(Method method : MinecraftSessionService.getMethods()) {
-					if(method.getName().equals("fetchProfile")) {
-						MinecraftSessionService_fetchProfile = method;
-						LEGACY_PROFILES = false;
-						break;
-					}
-					if(method.getName().equals("fillProfileProperties")) {
-						MinecraftSessionService_fillProfileProperties = method;
-						LEGACY_PROFILES = true;
-						break;
-					}
-				}
-				if(MinecraftSessionService_fetchProfile == null && MinecraftSessionService_fillProfileProperties == null) throw new NoSuchMethodException("Method MinecraftSessionService.fetchProfile() not found.");
-				
-				Class<?> GameProfile = null;
-				if(MinecraftSessionService_fetchProfile != null) {
-					Class<?> ProfileResult = MinecraftSessionService_fetchProfile.getReturnType();
-					ProfileResult_getProfile = ProfileResult.getMethod("profile");
-					GameProfile = ProfileResult_getProfile.getReturnType();
 
-				} else if(MinecraftSessionService_fillProfileProperties != null) {
+				Class<?> GameProfile = null;
+				try {
+					OfflinePlayer_getPlayerProfile = OfflinePlayer.class.getDeclaredMethod("getPlayerProfile");
+					Class<?> PlayerProfile = OfflinePlayer_getPlayerProfile.getReturnType();
+					PlayerProfile_isComplete = PlayerProfile.getDeclaredMethod("isComplete");
+					PlayerProfile_update = PlayerProfile.getDeclaredMethod("update");
+					PlayerProfile_clone = PlayerProfile.getDeclaredMethod("clone");
+					Class<?> CraftPlayerProfile = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".profile.CraftPlayerProfile");
+					CraftPlayerProfile_buildGameProfile = CraftPlayerProfile.getDeclaredMethod("buildGameProfile");
+					GameProfile = CraftPlayerProfile_buildGameProfile.getReturnType();
+
+					LEGACY_PROFILES = false;
+				} catch(NoSuchMethodException|ClassNotFoundException e) {
+					Class<?> CraftOfflinePlayer = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".CraftOfflinePlayer");
+					CraftOfflinePlayer_profile = CraftOfflinePlayer.getDeclaredField("profile");
+					CraftOfflinePlayer_profile.setAccessible(true);
+					Class<?> CraftServer = Bukkit.getServer().getClass();
+					CraftServer_getServer = CraftServer.getMethod("getServer");
+					Class<?> MinecraftServer = CraftServer_getServer.getReturnType();
+					for(Method method : MinecraftServer.getMethods()) {
+						if(method.getReturnType().getSimpleName().equals("MinecraftSessionService")) {
+							MinecraftServer_getMinecraftSessionService = method;
+							break;
+						}
+					}
+					if(MinecraftServer_getMinecraftSessionService == null) throw new NoSuchMethodException("Method MinecraftServer.getMinecraftSessionService() not found.");
+					
+					Class<?> MinecraftSessionService = MinecraftServer_getMinecraftSessionService.getReturnType();
+					for(Method method : MinecraftSessionService.getMethods()) {
+						if(method.getName().equals("fillProfileProperties")) {
+							MinecraftSessionService_fillProfileProperties = method;
+							LEGACY_PROFILES = true;
+							break;
+						}
+					}
+					if(MinecraftSessionService_fillProfileProperties == null) throw new NoSuchMethodException("Method MinecraftSessionService.fillProfileProperties() not found.");
+					
 					GameProfile = MinecraftSessionService_fillProfileProperties.getReturnType();
+					GameProfile_new = GameProfile.getConstructor(UUID.class, String.class);
 				}
-				GameProfile_new = GameProfile.getConstructor(UUID.class, String.class);
-				GameProfile_getProperties = GameProfile.getDeclaredMethod("getProperties");
+				
+				for(Method method : GameProfile.getMethods()) {
+					if(StringUtil.equals(method.getName(), "getProperties", "properties")) {
+						GameProfile_getProperties = method;
+						break;
+					}
+				}
+				if(GameProfile_getProperties == null) throw new NoSuchMethodException("Method GameProfile.properties() not found.");
+
+				Class<?> PropertyMap = GameProfile_getProperties.getReturnType();
+				PropertyMap_properties = PropertyMap.getDeclaredField("properties");
+				PropertyMap_properties.setAccessible(true);
+				if(MINECRAFT_VERSION[0] >= 1 && (MINECRAFT_VERSION[1] >= 22 || (MINECRAFT_VERSION[1] == 21 && MINECRAFT_VERSION[2] >= 6))) {
+					Field theUnsafe = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
+					theUnsafe.setAccessible(true);
+					UNSAFE = (sun.misc.Unsafe)theUnsafe.get(null);
+				}
+
 				PLAYER_DISGUISE_AVAILABLE = true;
-			} catch(ClassNotFoundException|NoSuchFieldException|NoSuchMethodException e) {
+			} catch(ClassNotFoundException|NoSuchFieldException|NoSuchMethodException|IllegalAccessException e) {
 				e.printStackTrace();
 			}
 			try {
@@ -472,7 +516,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		/* Metrics end */
 
 		if(config.UPDATE_CHECK) {
-			getServer().getScheduler().runTaskLaterAsynchronously(this, new UpdateCheck(this, getServer().getConsoleSender(), config.UPDATE_DOWNLOAD), 20L);
+			Bukkit.getScheduler().runTaskLaterAsynchronously(this, new UpdateCheck(this, getServer().getConsoleSender(), config.UPDATE_DOWNLOAD), 20L);
 		}
 
 		getLogger().info("Enabled!");
@@ -897,6 +941,9 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				Multimap sourceMap = (Multimap)GameProfile_getProperties.invoke(profileDatabase.get(targetSkin.toLowerCase(Locale.ENGLISH)));
 				Multimap targetMap = (Multimap)GameProfile_getProperties.invoke(targetProfile);
 				if(sourceMap.containsKey("textures")) {
+					if(PropertyMap_properties.get(targetMap).getClass().getSimpleName().contains("Immutable")) {
+						UNSAFE.putObject(targetMap, UNSAFE.objectFieldOffset(PropertyMap_properties), LinkedHashMultimap.create((Multimap)PropertyMap_properties.get(targetMap)));
+					}
 					if(targetMap.containsKey("textures")) {
 						targetMap.removeAll("textures");
 					}
@@ -949,25 +996,39 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private void retrieveProfile(String targetSkin, @Nullable Consumer<Boolean> callback) {
 		Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
 			OfflinePlayer sourcePlayer = Bukkit.getOfflinePlayer(targetSkin);
-			try {
-				Object sourceProfile = sourcePlayer instanceof Player ? CraftPlayer_getProfile.invoke(sourcePlayer) : CraftOfflinePlayer_profile.get(sourcePlayer);
-				if(!((Multimap)GameProfile_getProperties.invoke(sourceProfile)).containsKey("textures")) {
-					if(!LEGACY_PROFILES) {
-						sourceProfile = ProfileResult_getProfile.invoke(MinecraftSessionService_fetchProfile.invoke(MinecraftServer_getMinecraftSessionService.invoke(CraftServer_getServer.invoke(Bukkit.getServer())), sourcePlayer.getUniqueId(), true));
+			if(!LEGACY_PROFILES) {
+				try {
+					Object sourceProfile = OfflinePlayer_getPlayerProfile.invoke(sourcePlayer);
+					Object copiedProfile = null;
+					if(!((Boolean)PlayerProfile_isComplete.invoke(sourceProfile))) {
+						copiedProfile = ((CompletableFuture)PlayerProfile_update.invoke(sourceProfile)).get();
 					} else {
+						copiedProfile = PlayerProfile_clone.invoke(sourceProfile);
+					}
+
+					profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), CraftPlayerProfile_buildGameProfile.invoke(copiedProfile));
+
+					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
+				} catch(IllegalAccessException|InvocationTargetException|ExecutionException|InterruptedException e) {
+					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+				}
+			} else {
+				try {
+					Object sourceProfile = sourcePlayer instanceof Player ? CraftPlayer_getProfile.invoke(sourcePlayer) : CraftOfflinePlayer_profile.get(sourcePlayer);
+					if(!((Multimap)GameProfile_getProperties.invoke(sourceProfile)).containsKey("textures")) {
 						MinecraftSessionService_fillProfileProperties.invoke(MinecraftServer_getMinecraftSessionService.invoke(CraftServer_getServer.invoke(Bukkit.getServer())), sourceProfile, true);
 					}
-				}
-				Object copiedProfile = GameProfile_new.newInstance(sourcePlayer.getUniqueId(), sourcePlayer.getName());
-				Multimap sourceMap = (Multimap)GameProfile_getProperties.invoke(sourceProfile);
-				Multimap targetMap = (Multimap)GameProfile_getProperties.invoke(copiedProfile);
-				targetMap.putAll(sourceMap);
-				
-				profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), copiedProfile);
+					Object copiedProfile = GameProfile_new.newInstance(sourcePlayer.getUniqueId(), sourcePlayer.getName());
+					Multimap sourceMap = (Multimap)GameProfile_getProperties.invoke(sourceProfile);
+					Multimap targetMap = (Multimap)GameProfile_getProperties.invoke(copiedProfile);
+					targetMap.putAll(sourceMap);
+					
+					profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), copiedProfile);
 
-				if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
-			} catch(IllegalAccessException|InvocationTargetException|InstantiationException e) {
-				if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
+				} catch(IllegalAccessException|InvocationTargetException|InstantiationException e) {
+					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+				}
 			}
 		});
 	}
@@ -995,12 +1056,15 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				Multimap sourceMap = (Multimap)GameProfile_getProperties.invoke(profileDatabase.get(player.getName().toLowerCase(Locale.ENGLISH)));
 				Multimap targetMap = (Multimap)GameProfile_getProperties.invoke(targetProfile);
 				if(sourceMap.containsKey("textures")) {
+					if(PropertyMap_properties.get(targetMap).getClass().getSimpleName().contains("Immutable")) {
+						UNSAFE.putObject(targetMap, UNSAFE.objectFieldOffset(PropertyMap_properties), LinkedHashMultimap.create((Multimap)PropertyMap_properties.get(targetMap)));
+					}
 					if(targetMap.containsKey("textures")) {
 						targetMap.removeAll("textures");
 					}
 					targetMap.putAll("textures", sourceMap.get("textures"));
 				}
-
+				
 				playerDisguiseMap.remove(player.getUniqueId());
 				for(Player observer : Bukkit.getOnlinePlayers()) {
 					if(observer != player) {
@@ -1075,13 +1139,24 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		Player player = event.getPlayer();
 		if(!event.isCancelled() && disguiseMap.containsKey(player.getUniqueId())) {
 			Entity entity = disguiseMap.get(player.getUniqueId());
-			if(entity.getType().name().equals("SHULKER")) {
-				Location to = event.getTo();
-				entity.teleport(new Location(to.getWorld(), to.getBlockX()+0.5, to.getBlockY()+0.0, to.getBlockZ()+0.5));
+			World worldFrom = entity.getWorld();
+			if(LEGACY_INJECTION && !event.getTo().getWorld().equals(worldFrom)) {
+				undisguise0(player);
+				Entity newEntity = disguise0(player, entity.getType());
+				try {
+					Entity_copyMetadataFrom.invoke(CraftEntity_getHandle.invoke(newEntity), CraftEntity_getHandle.invoke(entity));
+				} catch(IllegalAccessException|InvocationTargetException e) {
+					if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+				}
 			} else {
-				entity.teleport(event.getTo());
+				if(entity.getType().name().equals("SHULKER")) {
+					Location to = event.getTo();
+					entity.teleport(new Location(to.getWorld(), to.getBlockX()+0.5, to.getBlockY()+0.0, to.getBlockZ()+0.5));
+				} else {
+					entity.teleport(event.getTo());
+				}
+				entity.setVelocity(player.getVelocity());
 			}
-			entity.setVelocity(player.getVelocity());
 		}
 	}
 	
