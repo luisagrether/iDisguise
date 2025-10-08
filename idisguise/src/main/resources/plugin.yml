@@ -8,6 +8,8 @@ website: https://www.spigotmc.org/resources/idisguise.5509/
 loadbefore: [MinecraftTrainSimulator]
 commands:
    disguise:
-      description: Disguise as a mob or other player.
+      description: Disguise yourself as a mob or other player.
+   odisguise:
+      description: Disguise another player as a mob or other player.
    undisguise:
-      description: Undisguise.
+      description: Undisguise yourself or another player.

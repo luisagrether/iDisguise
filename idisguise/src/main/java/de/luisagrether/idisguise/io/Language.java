@@ -17,22 +17,32 @@ public class Language {
 
     public String CONSOLE_USE_COMMAND = ChatColor.RED + "This command is for players only.";
     public String CURRENTLY_DISGUISED_AS_PLAYER = ChatColor.GOLD + "You are currently disguised as player: %targetSkin%";
+	public String ODISGUISE_CURRENTLY_DISGUISED_AS_PLAYER = ChatColor.GOLD + "%player% is currently disguised as player: %targetSkin%";
     public String CURRENTLY_DISGUISED_AS_ENTITY = ChatColor.GOLD + "You are currently disguised as: %entityType%";
+	public String ODISGUISE_CURRENTLY_DISGUISED_AS_ENTITY = ChatColor.GOLD + "%player% is currently disguised as: %entityType%";
     public String CURRENTLY_NOT_DISGUISED = ChatColor.GOLD + "You are not disguised.";
+	public String ODISGUISE_CURRENTLY_NOT_DISGUISED = ChatColor.GOLD + "%player% is not disguised.";
     public String DISGUISE_TYPE_NOT_SUPPORTED = ChatColor.RED + "Currently not supported!";
     public String DISGUISE_TYPE_NOT_FOUND = ChatColor.RED + "Disguise type not found: %entityType%";
 	public String DISGUISE_NO_PERMISSION = ChatColor.RED + "You don't have permission.";
 	public String DISGUISE_EVENT_CANCELLED = ChatColor.RED + "Another plugin prevents you from disguising.";
+	public String ODISGUISE_EVENT_CANCELLED = ChatColor.RED + "Another plugin prevents %player% from disguising.";
     public String PLAYER_DISGUISE_ACCOUNT_NAME_MISSING = ChatColor.RED + "Please feed me an account name as well.";
     public String PLAYER_DISGUISE_ACCOUNT_NAME_INVALID = ChatColor.RED + "This account name is invalid.";
     public String DISGUISED_SUCCESSFULLY = ChatColor.GOLD + "Disguised successfully!";
-    public String DISGUISE_ERROR = ChatColor.RED + "Something went wrong with your disguise.";
-    public String DISGUISE_STATEMENT_ERROR = ChatColor.RED + "Something went wrong with your additional statement: %statement%";
+    public String DISGUISE_ERROR = ChatColor.RED + "Something went wrong with the disguise.";
+    public String DISGUISE_STATEMENT_ERROR = ChatColor.RED + "Something went wrong with the additional statement: %statement%";
     public String DISGUISE_STATEMENT_FORBIDDEN = ChatColor.RED + "This statement is forbidden: %statement%";
 	public String DISGUISE_STATEMENT_UNKNOWN = ChatColor.RED + "This statement is unknown or uses invalid syntax: %statement%";
     public String UNDISGUISED_SUCCESSFULLY = ChatColor.GOLD + "Undisguised successfully!";
     public String UNDISGUISE_NOT_DISGUISED = ChatColor.RED + "You are not disguised.";
+	public String UNDISGUISE_OTHER_NOT_DISGUISED = ChatColor.RED + "%player% is not disguised.";
 	public String UNDISGUISE_EVENT_CANCELLED = ChatColor.RED + "Another plugin prevents you from undisguising.";
+	public String UNDISGUISE_OTHER_EVENT_CANCELLED = ChatColor.RED + "Another plugin prevents %player% from undisguising.";
+	public String ODISGUISE_NO_PLAYERNAME_GIVEN = ChatColor.RED + "Please feed me the name of an online player.";
+	public String ODISGUISE_PLAYER_NOT_FOUND = ChatColor.RED + "Can't find player: %player%";
+	public String ODISGUISE_NOTIFICATION = ChatColor.GOLD + "You were disguised by %sender%.";
+	public String UNDISGUISE_NOTIFICATION = ChatColor.GOLD + "You were undisguised by %sender%.";
 
     public String UPDATE_AVAILABLE = ChatColor.GOLD + "[iDisguise] An update is available: %version%";
 	public String UPDATE_ALREADY_DOWNLOADED = ChatColor.GOLD + "[iDisguise] Update already downloaded. Restart the server to apply.";

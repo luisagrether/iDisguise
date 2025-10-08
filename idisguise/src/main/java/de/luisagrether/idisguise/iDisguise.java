@@ -495,6 +495,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 
 		if(config.USE_PERMISSION_NODES) {
 			Bukkit.getPluginManager().addPermission(new Permission("iDisguise.disguise.*", PermissionDefault.OP));
+			Bukkit.getPluginManager().addPermission(new Permission("iDisguise.others", PermissionDefault.OP));
 			for(EntityType type : EntityType.values()) {
 				if(config.DISGUISE_TYPE_BLACKLIST.contains(type.name())) continue;
 				Bukkit.getPluginManager().addPermission(new Permission("iDisguise.disguise." + type.name(), PermissionDefault.OP));
@@ -532,11 +533,6 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	}
 	
 	public boolean onCommand(CommandSender sender, Command command, String alias, String[] args) {
-		if(!(sender instanceof Player)) {
-			sender.sendMessage(language.CONSOLE_USE_COMMAND);
-			return true;
-		}
-
 		if(debugMode) {
 			for(int i = 0; i < args.length; i++) getLogger().info("args[" + i + "] = \"" + args[i] + "\"");
 		}
@@ -562,43 +558,84 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			for(int i = 0; i < args.length; i++) getLogger().info("new_args[" + i + "] = \"" + args[i] + "\"");
 		}
 
-		if(command.getName().equalsIgnoreCase("disguise")) {
+		if(StringUtil.equalsIgnoreCase(command.getName(), "disguise", "odisguise")) {
+			boolean self;
+			Player target = null;
+			if(command.getName().equalsIgnoreCase("disguise")) {
+				if(!(sender instanceof Player)) {
+					sender.sendMessage(language.CONSOLE_USE_COMMAND);
+					return true;
+				}
+				self = true;
+				target = (Player)sender;
+			} else {
+				if(sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+					sender.sendMessage(language.DISGUISE_NO_PERMISSION);
+					return true;
+				}
+				if(args.length == 0) {
+					sender.sendMessage(language.ODISGUISE_NO_PLAYERNAME_GIVEN);
+					return true;
+				}
+				self = false;
+				target = Bukkit.getPlayerExact(args[0]);
+				if(target == null)
+					target = Bukkit.getPlayer(args[0]);
+				if(target == null) {
+					sender.sendMessage(language.ODISGUISE_PLAYER_NOT_FOUND.replace("%player%", args[0]));
+					return true;
+				}
+				args = Arrays.copyOfRange(args, 1, args.length);
+			}
 			if(args.length == 0) {
-				if(isDisguised((Player)sender)) {
-					if(getDisguise((Player)sender) == EntityType.PLAYER) {
-						sender.sendMessage(language.CURRENTLY_DISGUISED_AS_PLAYER.replace("%targetSkin%", playerDisguiseMap.get(((Player)sender).getUniqueId())));
+				if(isDisguised(target)) {
+					if(getDisguise(target) == EntityType.PLAYER) {
+						sender.sendMessage(
+							self ? 
+							language.CURRENTLY_DISGUISED_AS_PLAYER.replace("%targetSkin%", playerDisguiseMap.get(target.getUniqueId())) :
+							language.ODISGUISE_CURRENTLY_DISGUISED_AS_PLAYER.replace("%player%", target.getName()).replace("%targetSkin%", playerDisguiseMap.get(target.getUniqueId()))
+						);
 					} else {
-						sender.sendMessage(language.CURRENTLY_DISGUISED_AS_ENTITY.replace("%entityType%", getDisguise((Player)sender).name()));
-						((Player)sender).addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 100, 1, true, false));
-						Entity finalEntity = disguiseMap.get(((Player)sender).getUniqueId());
-						if(!LEGACY_INJECTION) {
-							((Player)sender).showEntity(this, finalEntity);
-						} else {
-							try {
-								LegacyInjector_toggleIntercept.invoke(null, finalEntity, sender, false);
-							} catch(Exception e) {
-								if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
-							}
-						}
-						Bukkit.getScheduler().runTaskLater(this, () -> {
+						if(self) {
+							sender.sendMessage(language.CURRENTLY_DISGUISED_AS_ENTITY.replace("%entityType%", getDisguise(target).name()));
+							target.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 100, 1, true, false));
+							Entity finalEntity = disguiseMap.get(target.getUniqueId());
+							Player finalTarget = target;
 							if(!LEGACY_INJECTION) {
-								((Player)sender).hideEntity(this, finalEntity);
+								finalTarget.showEntity(this, finalEntity);
 							} else {
 								try {
-									LegacyInjector_toggleIntercept.invoke(null, finalEntity, sender, true);
+									LegacyInjector_toggleIntercept.invoke(null, finalEntity, finalTarget, false);
 								} catch(Exception e) {
 									if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
 								}
 							}
-						}, 100L);
+							Bukkit.getScheduler().runTaskLater(this, () -> {
+								if(!LEGACY_INJECTION) {
+									finalTarget.hideEntity(this, finalEntity);
+								} else {
+									try {
+										LegacyInjector_toggleIntercept.invoke(null, finalEntity, finalTarget, true);
+									} catch(Exception e) {
+										if(debugMode) getLogger().log(Level.SEVERE, "Unexpected failure!", e);
+									}
+								}
+							}, 100L);
+						} else {
+							sender.sendMessage(language.ODISGUISE_CURRENTLY_DISGUISED_AS_ENTITY.replace("%player%", target.getName()).replace("%entityType%", getDisguise(target).name()));
+						}
 					}
 				} else {
-					sender.sendMessage(language.CURRENTLY_NOT_DISGUISED);
+					sender.sendMessage(
+						self ? 
+						language.CURRENTLY_NOT_DISGUISED :
+						language.ODISGUISE_CURRENTLY_NOT_DISGUISED.replace("%player%", target.getName())
+					);
 				}
 			} else if(args[0].equalsIgnoreCase("player")) {
 				if(!PLAYER_DISGUISE_AVAILABLE || config.DISGUISE_TYPE_BLACKLIST.contains("PLAYER")) {
 					sender.sendMessage(language.DISGUISE_TYPE_NOT_SUPPORTED);
-				} else if(!hasPermission((Player)sender, EntityType.PLAYER)) {
+				} else if(sender instanceof Player && !hasPermission((Player)sender, EntityType.PLAYER)) {
 					sender.sendMessage(language.DISGUISE_NO_PERMISSION);
 				} else if(args.length == 1) {
 					sender.sendMessage(language.PLAYER_DISGUISE_ACCOUNT_NAME_MISSING);
@@ -606,15 +643,23 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					sender.sendMessage(language.PLAYER_DISGUISE_ACCOUNT_NAME_INVALID);
 				} else {
 					try {
-						disguiseAsPlayer((Player)sender, args[1], (success) -> {
+						Player finalTarget = target;
+						disguiseAsPlayer(target, args[1], (success) -> {
 							if(success) {
 								sender.sendMessage(language.DISGUISED_SUCCESSFULLY);
+								if(!self) {
+									finalTarget.sendMessage(language.ODISGUISE_NOTIFICATION.replace("%sender%", sender.getName()));
+								}
 							} else {
 								sender.sendMessage(language.DISGUISE_ERROR);
 							}
 						});
 					} catch(EventCancelledException e) {
-						sender.sendMessage(language.DISGUISE_EVENT_CANCELLED);
+						sender.sendMessage(
+							self ?
+							language.DISGUISE_EVENT_CANCELLED :
+							language.ODISGUISE_EVENT_CANCELLED.replace("%player%", target.getName())
+						);
 					}
 				}
 			} else {
@@ -622,11 +667,11 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					EntityType type = EntityType.valueOf(args[0].toUpperCase(Locale.ENGLISH).replace('-', '_'));
 					if(config.DISGUISE_TYPE_BLACKLIST.contains(type.name())) {
 						sender.sendMessage(language.DISGUISE_TYPE_NOT_SUPPORTED);
-					} else if(!hasPermission((Player)sender, EntityType.PLAYER)) {
+					} else if(sender instanceof Player && !hasPermission((Player)sender, type)) {
 						sender.sendMessage(language.DISGUISE_NO_PERMISSION);
 					} else {
 						try {
-							Entity entity = disguise((Player)sender, type);
+							Entity entity = disguise(target, type);
 							for(int i = 1; i < args.length; i++) {
 								String codeLine = args[i];
 								String[] codeFrags = codeLine.split("[()]", -1);
@@ -730,8 +775,15 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 								}
 							}
 							sender.sendMessage(language.DISGUISED_SUCCESSFULLY);
+							if(!self) {
+								target.sendMessage(language.ODISGUISE_NOTIFICATION.replace("%sender%", sender.getName()));
+							}
 						} catch(EventCancelledException e) {
-							sender.sendMessage(language.DISGUISE_EVENT_CANCELLED);
+							sender.sendMessage(
+								self ?
+								language.DISGUISE_EVENT_CANCELLED :
+								language.ODISGUISE_EVENT_CANCELLED.replace("%player%", target.getName())
+							);
 						}
 					}
 				} catch(IllegalArgumentException e) {
@@ -740,15 +792,50 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				}
 			}
 		} else if(command.getName().equalsIgnoreCase("undisguise")) {
-			if(isDisguised((Player)sender)) {
+			boolean self;
+			Player target = null;
+			if(args.length == 0) {
+				if(!(sender instanceof Player)) {
+					sender.sendMessage(language.ODISGUISE_NO_PLAYERNAME_GIVEN);
+					return true;
+				}
+				self = true;
+				target = (Player)sender;
+			} else {
+				if(sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+					sender.sendMessage(language.DISGUISE_NO_PERMISSION);
+					return true;
+				}
+				self = false;
+				target = Bukkit.getPlayerExact(args[0]);
+				if(target == null)
+					target = Bukkit.getPlayer(args[0]);
+				if(target == null) {
+					sender.sendMessage(language.ODISGUISE_PLAYER_NOT_FOUND.replace("%player%", args[0]));
+					return true;
+				}
+				args = Arrays.copyOfRange(args, 1, args.length);
+			}
+			if(isDisguised(target)) {
 				try {
-					undisguise((Player)sender);
+					undisguise(target);
 					sender.sendMessage(language.UNDISGUISED_SUCCESSFULLY);
+					if(!self) {
+						target.sendMessage(language.UNDISGUISE_NOTIFICATION.replace("%sender%", sender.getName()));
+					}
 				} catch(EventCancelledException e) {
-					sender.sendMessage(language.UNDISGUISE_EVENT_CANCELLED);
+					sender.sendMessage(
+						self ?
+						language.UNDISGUISE_EVENT_CANCELLED :
+						language.UNDISGUISE_OTHER_EVENT_CANCELLED.replace("%player%", target.getName())
+					);
 				}
 			} else {
-				sender.sendMessage(language.UNDISGUISE_NOT_DISGUISED);
+				sender.sendMessage(
+					self ?
+					language.UNDISGUISE_NOT_DISGUISED :
+					language.UNDISGUISE_OTHER_NOT_DISGUISED.replace("%player%", target.getName())
+				);
 			}
 		}
 		return true;
@@ -756,21 +843,39 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 
 	public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
 		List<String> completions = new ArrayList<String>();
-		if(!(sender instanceof Player)) {
-			return completions;
-		}
+		
 
-		if(command.getName().equalsIgnoreCase("disguise")) {
-			if(args.length < 2) {
-				for(EntityType type : EntityType.values()) {
-					if(type.equals(EntityType.PLAYER) && !PLAYER_DISGUISE_AVAILABLE) continue;
-					if(!config.DISGUISE_TYPE_BLACKLIST.contains(type.name()) && hasPermission((Player)sender, type)) {
-						completions.add(type.name());
-					}
+		if(StringUtil.equalsIgnoreCase(command.getName(), "disguise", "odisguise")) {
+			boolean self = command.getName().equalsIgnoreCase("disguise");
+			if(self && !(sender instanceof Player)) {
+				return completions;
+			}
+			if(!self && sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+				return completions;
+			}
+
+			if(!self && args.length < 2) {
+				for(Player player : Bukkit.getOnlinePlayers()) {
+					completions.add(player.getName());
 				}
 				if(args.length > 0) {
 					for(int i = 0; i < completions.size(); i++) {
-						if(!StringUtil.startsWithIgnoreCase(completions.get(i), args[0].replace('-', '_'))) {
+						if(!StringUtil.startsWithIgnoreCase(completions.get(i), args[0])) {
+							completions.remove(i);
+							i--;
+						}
+					}
+				}
+			} else if(args.length < (self ? 2 : 3)) {
+				for(EntityType type : EntityType.values()) {
+					if(type.equals(EntityType.PLAYER) && !PLAYER_DISGUISE_AVAILABLE) continue;
+					if(!config.DISGUISE_TYPE_BLACKLIST.contains(type.name()) && (!(sender instanceof Player) || hasPermission((Player)sender, type))) {
+						completions.add(type.name());
+					}
+				}
+				if(args.length > (self ? 0 : 1)) {
+					for(int i = 0; i < completions.size(); i++) {
+						if(!StringUtil.startsWithIgnoreCase(completions.get(i), args[self ? 0 : 1].replace('-', '_'))) {
 							completions.remove(i);
 							i--;
 						}
@@ -778,9 +883,9 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				}
 			} else {
 				try {
-					EntityType type = EntityType.valueOf(args[0].toUpperCase(Locale.ENGLISH).replace('-', '_'));
-					if(hasPermission((Player)sender, type) && tabCompletions.containsKey(type)) {
-						if(!type.equals(EntityType.PLAYER) || args.length < 3) {
+					EntityType type = EntityType.valueOf(args[self ? 0 : 1].toUpperCase(Locale.ENGLISH).replace('-', '_'));
+					if((!(sender instanceof Player) || hasPermission((Player)sender, type)) && tabCompletions.containsKey(type)) {
+						if(!type.equals(EntityType.PLAYER) || args.length < (self ? 3 : 4)) {
 							completions.addAll(tabCompletions.get(type));
 						}
 					}
@@ -791,6 +896,22 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 						}
 					}
 				} catch(IllegalArgumentException e) {
+				}
+			}
+		} else if(command.getName().equalsIgnoreCase("undisguise")) {
+			if(sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+				return completions;
+			}
+
+			for(Player player : Bukkit.getOnlinePlayers()) {
+				completions.add(player.getName());
+			}
+			if(args.length > 0) {
+				for(int i = 0; i < completions.size(); i++) {
+					if(!StringUtil.startsWithIgnoreCase(completions.get(i), args[0])) {
+						completions.remove(i);
+						i--;
+					}
 				}
 			}
 		}
