@@ -86,8 +86,10 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	public static final Pattern ITEMSTACK_VAL = Pattern.compile("([A-Za-z0-9_]+),([0-9]+)");
 	public static final Pattern STRING_VAL = Pattern.compile("\".*\"");
 	public static final Pattern ACCOUNTNAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
-	private static String PACKAGE_VERSION;
+
+	private static final Pattern MC_VERSION = Pattern.compile("([0-9]+)\\.([0-9]+)(?:\\.([0-9]+))?");
 	private static int[] MINECRAFT_VERSION;
+	private static String PACKAGE_VERSION = null;
 	private static boolean LEGACY_INJECTION = false;
 	private static Method LegacyInjector_inject = null;
 	private static Method LegacyInjector_toggleIntercept = null;
@@ -104,15 +106,15 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private static Method PlayerProfile_isComplete = null;
 	private static Method PlayerProfile_update = null;
 	private static Method PlayerProfile_clone = null;
-	private static Method CraftPlayerProfile_buildGameProfile;
+	private static Class<?> CraftPlayerProfile = null;
+	private static Constructor<?> CraftPlayerProfile_new = null;
+	private static Method CraftPlayerProfile_buildGameProfile = null;
 	private static Field CraftOfflinePlayer_profile = null;
 	private static Method CraftPlayer_getHandle = null;
 	private static Method CraftPlayer_getProfile = null;
 	private static Method CraftServer_getServer = null;
 	private static Method MinecraftServer_getMinecraftSessionService = null;
-	//private static Method MinecraftSessionService_fetchProfile = null;
 	private static Method MinecraftSessionService_fillProfileProperties = null;
-	//private static Method ProfileResult_getProfile = null;
 	private static Constructor<?> GameProfile_new = null;
 	private static Method GameProfile_getProperties = null;
 	private static Field PropertyMap_properties = null;
@@ -130,16 +132,29 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private static Class<?> MaterialData = null;
 	private static Constructor<?> MaterialData_new = null;
 
+	private static String formatOBCClass(String path) {
+		return PACKAGE_VERSION == null ? "org.bukkit.craftbukkit." + path : "org.bukkit.craftbukkit." + PACKAGE_VERSION + "." + path;
+	}
+
+	private static String formatNMSClass(String path) {
+		return PACKAGE_VERSION == null ? "net.minecraft.server." + path : "net.minecraft.server." + PACKAGE_VERSION + "." + path;
+	}
+
 	static {
 		try {
+			Matcher m = MC_VERSION.matcher(Bukkit.getBukkitVersion());
+			if(m.find()) {
+				if(m.group(3) != null) {
+					MINECRAFT_VERSION = new int[] {Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2)), Integer.parseInt(m.group(3))};
+				} else {
+					MINECRAFT_VERSION = new int[] {Integer.parseInt(m.group(1)), Integer.parseInt(m.group(2))};
+				}
+			}
+			
 			PACKAGE_VERSION = Bukkit.getServer().getClass().getName();
 			PACKAGE_VERSION = PACKAGE_VERSION.substring(0, PACKAGE_VERSION.lastIndexOf("."));
 			PACKAGE_VERSION = PACKAGE_VERSION.substring(PACKAGE_VERSION.lastIndexOf(".") + 1);
-			String[] v = PACKAGE_VERSION.substring(1).split("_");
-			MINECRAFT_VERSION = new int[v.length];
-			for(int i = 0; i < v.length; i++) {
-				MINECRAFT_VERSION[i] = Integer.parseInt(v[i].replace("R", ""));
-			}
+			if(PACKAGE_VERSION.equals("craftbukkit")) PACKAGE_VERSION = null;
 		} catch(NumberFormatException|IndexOutOfBoundsException e) {
 			MINECRAFT_VERSION = null;
 		}
@@ -162,7 +177,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					}
 				}
 				try {
-					Class<?> CraftEntity = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.CraftEntity");
+					Class<?> CraftEntity = Class.forName(formatOBCClass("entity.CraftEntity"));
 					CraftEntity_getHandle = CraftEntity.getMethod("getHandle");
 					Class<?> Entity = CraftEntity_getHandle.getReturnType();
 					if(MINECRAFT_VERSION[1] == 17) {
@@ -183,7 +198,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					// everything fine
 				} catch(NoSuchMethodException e) {
 					try {
-						EntityInsentient = Class.forName("net.minecraft.server." + PACKAGE_VERSION + ".EntityInsentient");
+						EntityInsentient = Class.forName(formatNMSClass("EntityInsentient"));
 						EntityInsentient_setNoAI = EntityInsentient.getDeclaredMethod("k", boolean.class);
 						EntityInsentient_setNoAI.setAccessible(true);
 						LEGACY_DISABLE_AI = true;
@@ -193,7 +208,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				}
 			}
 			try {
-				Class<?> CraftPlayer = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".entity.CraftPlayer");
+				Class<?> CraftPlayer = Class.forName(formatOBCClass("entity.CraftPlayer"));
 				CraftPlayer_getHandle = CraftPlayer.getMethod("getHandle");
 				CraftPlayer_getProfile = CraftPlayer.getMethod("getProfile");
 
@@ -204,13 +219,14 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					PlayerProfile_isComplete = PlayerProfile.getDeclaredMethod("isComplete");
 					PlayerProfile_update = PlayerProfile.getDeclaredMethod("update");
 					PlayerProfile_clone = PlayerProfile.getDeclaredMethod("clone");
-					Class<?> CraftPlayerProfile = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".profile.CraftPlayerProfile");
+					CraftPlayerProfile = Class.forName(formatOBCClass("profile.CraftPlayerProfile"));
+					CraftPlayerProfile_new = CraftPlayerProfile.getConstructor(UUID.class, String.class);
 					CraftPlayerProfile_buildGameProfile = CraftPlayerProfile.getDeclaredMethod("buildGameProfile");
 					GameProfile = CraftPlayerProfile_buildGameProfile.getReturnType();
 
 					LEGACY_PROFILES = false;
 				} catch(NoSuchMethodException|ClassNotFoundException e) {
-					Class<?> CraftOfflinePlayer = Class.forName("org.bukkit.craftbukkit." + PACKAGE_VERSION + ".CraftOfflinePlayer");
+					Class<?> CraftOfflinePlayer = Class.forName(formatOBCClass("CraftOfflinePlayer"));
 					CraftOfflinePlayer_profile = CraftOfflinePlayer.getDeclaredField("profile");
 					CraftOfflinePlayer_profile.setAccessible(true);
 					Class<?> CraftServer = Bukkit.getServer().getClass();
@@ -249,7 +265,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				Class<?> PropertyMap = GameProfile_getProperties.getReturnType();
 				PropertyMap_properties = PropertyMap.getDeclaredField("properties");
 				PropertyMap_properties.setAccessible(true);
-				if(MINECRAFT_VERSION[0] >= 1 && (MINECRAFT_VERSION[1] >= 22 || (MINECRAFT_VERSION[1] == 21 && MINECRAFT_VERSION[2] >= 6))) {
+				if(MINECRAFT_VERSION[0] >= 1 && (MINECRAFT_VERSION[1] >= 22 || (MINECRAFT_VERSION[1] == 21 && MINECRAFT_VERSION[2] >= 9))) {
 					Field theUnsafe = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
 					theUnsafe.setAccessible(true);
 					UNSAFE = (sun.misc.Unsafe)theUnsafe.get(null);
@@ -262,7 +278,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			try {
 				EntityPlayer = CraftPlayer_getHandle.getReturnType();
 				for(Field field : EntityPlayer.getFields()) {
-					if(field.getType().getSimpleName().equals("PlayerConnection")) {
+					if(StringUtil.equals(field.getName(), "playerConnection", "connection") || field.getType().getSimpleName().equals("PlayerConnection")) {
 						EntityPlayer_playerConnection = field;
 						break;
 					}
@@ -309,7 +325,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 						LEGACY_PLAYER_DISGUISE_VIEWSELF = true;
 					} catch(ClassNotFoundException e2) {
 						try {
-							Class<?> PacketUpdatePlayerInfo = Class.forName("net.minecraft.server." + PACKAGE_VERSION + ".PacketPlayOutPlayerInfo");
+							Class<?> PacketUpdatePlayerInfo = Class.forName(formatNMSClass("PacketPlayOutPlayerInfo"));
 							Class<?> UpdatePlayerInfo = null;
 							for(Class<?> clazz : PacketUpdatePlayerInfo.getDeclaredClasses()) {
 								if(clazz.isEnum()) {
@@ -318,7 +334,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 								}
 							}
 							if(UpdatePlayerInfo == null) {
-								UpdatePlayerInfo = Class.forName("net.minecraft.server." + PACKAGE_VERSION + ".EnumPlayerInfoAction");
+								UpdatePlayerInfo = Class.forName(formatNMSClass("EnumPlayerInfoAction"));
 							}
 							PacketUpdatePlayerInfo_new = PacketUpdatePlayerInfo.getConstructor(UpdatePlayerInfo, Array.newInstance(EntityPlayer, 0).getClass());
 							UpdatePlayerInfo_ADD_PLAYER = UpdatePlayerInfo.getEnumConstants()[0];
@@ -337,7 +353,6 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				Material_createBlockData = Material.class.getMethod("createBlockData");
 				BlockData = Material_createBlockData.getReturnType();
 			} catch(NoSuchMethodException e) {
-				System.out.println("Legacy Materials.");
 				LEGACY_MATERIALS = true;
 				try {
 					MaterialData = Class.forName("org.bukkit.material.MaterialData");
@@ -364,7 +379,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	
 	public void onEnable() {
 		if(MINECRAFT_VERSION == null) {
-			getLogger().severe("This Minecraft server version is not supported! iDisguise is only for CraftBukkit and Spigot! It looks like you're running some other server mod like Paper or Purpur.");
+			getLogger().severe("This Minecraft server version is not supported!");
 			getPluginLoader().disablePlugin(this);
 			return;
 		}
@@ -1120,6 +1135,9 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			if(!LEGACY_PROFILES) {
 				try {
 					Object sourceProfile = OfflinePlayer_getPlayerProfile.invoke(sourcePlayer);
+					if(!CraftPlayerProfile.isInstance(sourceProfile)) {
+						sourceProfile = CraftPlayerProfile_new.newInstance(sourcePlayer.getUniqueId(), sourcePlayer.getName());
+					}
 					Object copiedProfile = null;
 					if(!((Boolean)PlayerProfile_isComplete.invoke(sourceProfile))) {
 						copiedProfile = ((CompletableFuture)PlayerProfile_update.invoke(sourceProfile)).get();
@@ -1130,7 +1148,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), CraftPlayerProfile_buildGameProfile.invoke(copiedProfile));
 
 					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
-				} catch(IllegalAccessException|InvocationTargetException|ExecutionException|InterruptedException e) {
+				} catch(IllegalAccessException|InvocationTargetException|InstantiationException|ExecutionException|InterruptedException e) {
 					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
 				}
 			} else {
