@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>de.luisagrether.idisguise</groupId>
   <artifactId>idisguise-impl-v1_10_R1</artifactId>
-  <version>6.0.1-SNAPSHOT</version>
+  <version>6.0.1</version>
   <name>iDisguise Implementation for v1_10_R1</name>
   
   <properties>

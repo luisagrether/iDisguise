@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>de.luisagrether.idisguise</groupId>
   <artifactId>idisguise</artifactId>
-  <version>6.0.1-SNAPSHOT</version>
+  <version>6.0.1</version>
   <name>iDisguise</name>
   <description>Recode of the famous iDisguse plugin!</description>
   
@@ -44,97 +44,97 @@
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_17_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_16_R3</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_16_R2</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_16_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_15_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_14_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_13_R2</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_13_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_12_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_11_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_10_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_9_R2</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_9_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_8_R3</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_8_R2</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
 	<dependency>
   		<groupId>de.luisagrether.idisguise</groupId>
   		<artifactId>idisguise-impl-v1_8_R1</artifactId>
-  		<version>${project.version}</version>
+  		<version>6.0.1</version>
   		<scope>compile</scope>
   	</dependency>
   </dependencies>

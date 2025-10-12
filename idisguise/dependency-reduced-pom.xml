@@ -4,7 +4,7 @@
   <groupId>de.luisagrether.idisguise</groupId>
   <artifactId>idisguise</artifactId>
   <name>iDisguise</name>
-  <version>6.0.1-SNAPSHOT</version>
+  <version>6.0.1</version>
   <description>Recode of the famous iDisguse plugin!</description>
   <build>
     <extensions>

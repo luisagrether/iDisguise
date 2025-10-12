@@ -509,6 +509,8 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		}
 
 		if(config.USE_PERMISSION_NODES) {
+			Bukkit.getPluginManager().addPermission(new Permission("iDisguise.*", PermissionDefault.OP));
+			Bukkit.getPluginManager().addPermission(new Permission("iDisguise.admin", PermissionDefault.OP));
 			Bukkit.getPluginManager().addPermission(new Permission("iDisguise.disguise.*", PermissionDefault.OP));
 			Bukkit.getPluginManager().addPermission(new Permission("iDisguise.others", PermissionDefault.OP));
 			for(EntityType type : EntityType.values()) {
@@ -539,10 +541,17 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	}
 	
 	public void onDisable() {
+		for(Player player : Bukkit.getOnlinePlayers()) {
+			if(isDisguised(player)) {
+				undisguise0(player);
+			}
+		}
+
 		for(Entity entity : disguiseMap.values()) {
 			entity.remove();
 		}
 		disguiseMap.clear();
+		playerDisguiseMap.clear();
 
 		getLogger().info("Disabled!");
 	}
@@ -584,7 +593,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				self = true;
 				target = (Player)sender;
 			} else {
-				if(sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+				if(!hasPermissionOthers(sender)) {
 					sender.sendMessage(language.DISGUISE_NO_PERMISSION);
 					return true;
 				}
@@ -596,11 +605,13 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				target = Bukkit.getPlayerExact(args[0]);
 				if(target == null)
 					target = Bukkit.getPlayer(args[0]);
-				if(target == null) {
+				if(target == null && !StringUtil.equalsIgnoreCase(args[0], "help", "?")) {
 					sender.sendMessage(language.ODISGUISE_PLAYER_NOT_FOUND.replace("%player%", args[0]));
 					return true;
 				}
-				args = Arrays.copyOfRange(args, 1, args.length);
+				if(target != null) {
+					args = Arrays.copyOfRange(args, 1, args.length);
+				}
 			}
 			if(args.length == 0) {
 				if(isDisguised(target)) {
@@ -628,7 +639,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 							Bukkit.getScheduler().runTaskLater(this, () -> {
 								if(!LEGACY_INJECTION) {
 									finalTarget.hideEntity(this, finalEntity);
-								} else {
+								} else if(finalTarget.getWorld().equals(finalEntity.getWorld())) {
 									try {
 										LegacyInjector_toggleIntercept.invoke(null, finalEntity, finalTarget, true);
 									} catch(Exception e) {
@@ -647,6 +658,15 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 						language.ODISGUISE_CURRENTLY_NOT_DISGUISED.replace("%player%", target.getName())
 					);
 				}
+			} else if(StringUtil.equalsIgnoreCase(args[0], "help", "?")) {
+				int page = 1;
+				if(args.length > 1) {
+					try {
+						page = Integer.parseInt(args[1]);
+					} catch(IllegalArgumentException e) {
+					}
+				}
+				sendHelpPage(sender, page);
 			} else if(args[0].equalsIgnoreCase("player")) {
 				if(!PLAYER_DISGUISE_AVAILABLE || config.DISGUISE_TYPE_BLACKLIST.contains("PLAYER")) {
 					sender.sendMessage(language.DISGUISE_TYPE_NOT_SUPPORTED);
@@ -817,7 +837,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				self = true;
 				target = (Player)sender;
 			} else {
-				if(sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+				if(!hasPermissionOthers(sender)) {
 					sender.sendMessage(language.DISGUISE_NO_PERMISSION);
 					return true;
 				}
@@ -856,20 +876,61 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		return true;
 	}
 
+	private void sendHelpPage(CommandSender sender, int page) {
+		List<List<String>> helpPages = new ArrayList<>();
+		helpPages.add(new ArrayList<>());
+
+		if(sender instanceof Player) {
+			addHelpMessage(helpPages, language.HELP_DISGUISE_MOB);
+			if(hasPermission(sender, EntityType.PLAYER)) addHelpMessage(helpPages, language.HELP_DISGUISE_PLAYER);
+			addHelpMessage(helpPages, language.HELP_DISGUISE_CHECK);
+			addHelpMessage(helpPages, language.HELP_UNDISGUISE);
+			addHelpMessage(helpPages, language.HELP_DISGUISE_ALTER);
+			addHelpMessage(helpPages, language.HELP_INGAME_HELP);
+			if(hasPermissionAdmin(sender)) addHelpMessage(helpPages, language.HELP_DISGUISE_PERMISSION);
+		}
+		if(hasPermissionOthers(sender)) {
+			if(!helpPages.get(helpPages.size() - 1).isEmpty()) helpPages.add(new ArrayList<>());
+			addHelpMessage(helpPages, language.HELP_ODISGUISE);
+			addHelpMessage(helpPages, language.HELP_UNDISGUISE_OTHER);
+			addHelpMessage(helpPages, language.HELP_ODISGUISE_INFO);
+			if(!(sender instanceof Player)) addHelpMessage(helpPages, language.HELP_INGAME_HELP_2);
+			if(hasPermissionAdmin(sender)) addHelpMessage(helpPages, language.HELP_ODISGUISE_PERMISSION);
+		}
+
+		if(page < 1) page = 1;
+		if(page > helpPages.size()) page = helpPages.size();
+
+		sender.sendMessage(language.HELP_PAGE_TITLE.replace("%number%", page + "/" + helpPages.size()));
+		for(String line : helpPages.get(page - 1)) {
+			sender.sendMessage(line);
+		}
+	}
+
+	private void addHelpMessage(List<List<String>> helpPages, String helpMessage) {
+		String[] lines = helpMessage.split("\\\\\\\\");
+		if(helpPages.get(helpPages.size() - 1).size() + lines.length > 9) {
+			helpPages.add(new ArrayList<>());
+		}
+		for(int i = 0; i < lines.length; i++) {
+			helpPages.get(helpPages.size() - 1).add((i == 0 ? "- " : "  ") + lines[i]);
+		}
+	}
+
 	public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
 		List<String> completions = new ArrayList<String>();
-		
 
 		if(StringUtil.equalsIgnoreCase(command.getName(), "disguise", "odisguise")) {
 			boolean self = command.getName().equalsIgnoreCase("disguise");
 			if(self && !(sender instanceof Player)) {
 				return completions;
 			}
-			if(!self && sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+			if(!self && !hasPermissionOthers(sender)) {
 				return completions;
 			}
 
 			if(!self && args.length < 2) {
+				completions.add("?");
 				for(Player player : Bukkit.getOnlinePlayers()) {
 					completions.add(player.getName());
 				}
@@ -882,6 +943,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					}
 				}
 			} else if(args.length < (self ? 2 : 3)) {
+				completions.add("?");
 				for(EntityType type : EntityType.values()) {
 					if(type.equals(EntityType.PLAYER) && !PLAYER_DISGUISE_AVAILABLE) continue;
 					if(!config.DISGUISE_TYPE_BLACKLIST.contains(type.name()) && (!(sender instanceof Player) || hasPermission((Player)sender, type))) {
@@ -914,7 +976,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				}
 			}
 		} else if(command.getName().equalsIgnoreCase("undisguise")) {
-			if(sender instanceof Player && (config.USE_PERMISSION_NODES ? !((Player)sender).hasPermission("iDisguise.others") : !((Player)sender).isOp())) {
+			if(!hasPermissionOthers(sender)) {
 				return completions;
 			}
 
@@ -933,12 +995,37 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		return completions;
 	}
 
-	private boolean hasPermission(Player player, EntityType type) {
-		if(!config.USE_PERMISSION_NODES) {
-			return player.isOp();
+	private boolean hasPermission(CommandSender sender, EntityType type) {
+		if(!(sender instanceof Player)) {
+			return true;
+		} else if(!config.USE_PERMISSION_NODES) {
+			return ((Player)sender).isOp();
 		} else {
-			return player.hasPermission("iDisguise.disguise.*") ||
-				   player.hasPermission("iDisguise.disguise." + type.name());
+			return ((Player)sender).hasPermission("iDisguise.*") ||
+				   ((Player)sender).hasPermission("iDisguise.disguise.*") ||
+				   ((Player)sender).hasPermission("iDisguise.disguise." + type.name());
+		}
+	}
+
+	private boolean hasPermissionAdmin(CommandSender sender) {
+		if(!(sender instanceof Player)) {
+			return true;
+		} else if(!config.USE_PERMISSION_NODES) {
+			return ((Player)sender).isOp();
+		} else {
+			return ((Player)sender).hasPermission("iDisguise.*") ||
+				   ((Player)sender).hasPermission("iDisguise.admin");
+		}
+	}
+
+	private boolean hasPermissionOthers(CommandSender sender) {
+		if(!(sender instanceof Player)) {
+			return true;
+		} else if(!config.USE_PERMISSION_NODES) {
+			return ((Player)sender).isOp();
+		} else {
+			return ((Player)sender).hasPermission("iDisguise.*") ||
+			       ((Player)sender).hasPermission("iDisguise.others");
 		}
 	}
 	
@@ -1027,7 +1114,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		Bukkit.getScheduler().runTaskLater(this, () -> {
 			if(!LEGACY_INJECTION) {
 				player.hideEntity(this, finalEntity);
-			} else {
+			} else if(player.getWorld().equals(finalEntity.getWorld())) {
 				try {
 					LegacyInjector_toggleIntercept.invoke(null, finalEntity, player, true);
 				} catch(Exception e) {
@@ -1258,12 +1345,18 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	
 	@EventHandler
 	public void handlePlayerJoin(PlayerJoinEvent event) {
+		Player player = event.getPlayer();
+		
 		for(Entry<UUID, Entity> entry : disguiseMap.entrySet()) {
-			event.getPlayer().hidePlayer(Bukkit.getPlayer(entry.getKey()));
+			player.hidePlayer(Bukkit.getPlayer(entry.getKey()));
 		}
 
-		String targetSkin = event.getPlayer().getName().toLowerCase(Locale.ENGLISH);
+		String targetSkin = player.getName().toLowerCase(Locale.ENGLISH);
 		if(!profileDatabase.containsKey(targetSkin)) retrieveProfile(targetSkin, null);
+
+		if(config.UPDATE_CHECK && hasPermissionAdmin(player)) {
+			Bukkit.getScheduler().runTaskLaterAsynchronously(this, new UpdateCheck(this, player, config.UPDATE_DOWNLOAD), 20L);
+		}
 	}
 	
 	@EventHandler
