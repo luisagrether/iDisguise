@@ -43,6 +43,8 @@ public class Language {
 	public String PLAYER_DISGUISE_ACCOUNT_NAME_MISSING = ChatColor.RED + "Please feed me an account name as well.";
     @LastUpdated(60001)
 	public String PLAYER_DISGUISE_ACCOUNT_NAME_INVALID = ChatColor.RED + "This account name is invalid.";
+	@LastUpdated(60002)
+	public String PLAYER_DISGUISE_ACCOUNT_NAME_BLACKLISTED = ChatColor.RED + "This account name is blacklisted.";
     @LastUpdated(60001)
 	public String DISGUISED_SUCCESSFULLY = ChatColor.GOLD + "Disguised successfully!";
     @LastUpdated(60001)

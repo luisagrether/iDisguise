@@ -4,7 +4,7 @@
   <groupId>de.luisagrether.idisguise</groupId>
   <artifactId>idisguise</artifactId>
   <name>iDisguise</name>
-  <version>6.0.1</version>
+  <version>6.0.2</version>
   <description>Recode of the famous iDisguse plugin!</description>
   <build>
     <extensions>
@@ -56,6 +56,12 @@
               <shadedPattern>de.luisagrether.idisguise.io.bstats</shadedPattern>
             </relocation>
           </relocations>
+        </configuration>
+      </plugin>
+      <plugin>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <configuration>
+          <subpackages>de.luisagrether.idisguise.api</subpackages>
         </configuration>
       </plugin>
     </plugins>

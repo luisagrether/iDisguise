@@ -1,12 +1,17 @@
 package de.luisagrether.idisguise;
 
 import java.beans.Statement;
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.net.URL;
+import java.net.URLConnection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -63,6 +68,8 @@ import org.bukkit.plugin.ServicePriority;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
+import org.json.simple.JSONObject;
+import org.json.simple.JSONValue;
 
 import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Multimap;
@@ -103,9 +110,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private static boolean PLAYER_DISGUISE_VIEWSELF = false;
 	private static boolean LEGACY_PLAYER_DISGUISE_VIEWSELF = false;
 	private static Method OfflinePlayer_getPlayerProfile = null;
-	private static Method PlayerProfile_isComplete = null;
 	private static Method PlayerProfile_update = null;
-	private static Method PlayerProfile_clone = null;
 	private static Class<?> CraftPlayerProfile = null;
 	private static Constructor<?> CraftPlayerProfile_new = null;
 	private static Method CraftPlayerProfile_buildGameProfile = null;
@@ -216,9 +221,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				try {
 					OfflinePlayer_getPlayerProfile = OfflinePlayer.class.getDeclaredMethod("getPlayerProfile");
 					Class<?> PlayerProfile = OfflinePlayer_getPlayerProfile.getReturnType();
-					PlayerProfile_isComplete = PlayerProfile.getDeclaredMethod("isComplete");
 					PlayerProfile_update = PlayerProfile.getDeclaredMethod("update");
-					PlayerProfile_clone = PlayerProfile.getDeclaredMethod("clone");
 					CraftPlayerProfile = Class.forName(formatOBCClass("profile.CraftPlayerProfile"));
 					CraftPlayerProfile_new = CraftPlayerProfile.getConstructor(UUID.class, String.class);
 					CraftPlayerProfile_buildGameProfile = CraftPlayerProfile.getDeclaredMethod("buildGameProfile");
@@ -409,11 +412,11 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			List<String> completions = new ArrayList<>();
 
 			if(type == EntityType.PLAYER) {
-				completions.add("<ACCOUNT-NAME>");
-				completions.add("Notch");
-				completions.add("jeb_");
-				completions.add("Dinnerbone");
-				completions.add("LuisaGrether");
+				for(String targetSkin : new String[] {"<ACCOUNT-NAME>", "Notch", "jeb_", "Dinnerbone", "LuisaGrether"}) {
+					if(!config.PLAYER_DISGUISE_BLACKLIST.contains(targetSkin.toLowerCase(Locale.ENGLISH))) {
+						completions.add(targetSkin);
+					}
+				}
 			} else {
 				Class<?> clazz = type.getEntityClass();
 				for(Method method : clazz.getMethods()) {
@@ -676,6 +679,8 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					sender.sendMessage(language.PLAYER_DISGUISE_ACCOUNT_NAME_MISSING);
 				} else if(!ACCOUNTNAME.matcher(args[1]).matches()) {
 					sender.sendMessage(language.PLAYER_DISGUISE_ACCOUNT_NAME_INVALID);
+				} else if(config.PLAYER_DISGUISE_BLACKLIST.contains(args[1].toLowerCase(Locale.ENGLISH))) {
+					sender.sendMessage(language.PLAYER_DISGUISE_ACCOUNT_NAME_BLACKLISTED);
 				} else {
 					try {
 						Player finalTarget = target;
@@ -1129,6 +1134,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	public void disguiseAsPlayer(Player player, String targetSkin, boolean fireEvent, @Nullable Consumer<Boolean> callback) throws EventCancelledException {
 		if(!PLAYER_DISGUISE_AVAILABLE || config.DISGUISE_TYPE_BLACKLIST.contains("PLAYER")) throw new UnsupportedOperationException("Currently not supported!");
 		if(!ACCOUNTNAME.matcher(targetSkin).matches()) throw new IllegalArgumentException("This account name is invalid.");
+		if(config.PLAYER_DISGUISE_BLACKLIST.contains(targetSkin.toLowerCase(Locale.ENGLISH))) throw new IllegalArgumentException("This account name is blacklisted.");
 		
 		if(fireEvent) {
 			PlayerDisguiseAsPlayerEvent event = new PlayerDisguiseAsPlayerEvent(player, targetSkin);
@@ -1144,6 +1150,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private void disguiseAsPlayer0(Player player, String targetSkin, @Nullable Consumer<Boolean> callback) {
 		if(!PLAYER_DISGUISE_AVAILABLE || config.DISGUISE_TYPE_BLACKLIST.contains("PLAYER")) throw new UnsupportedOperationException("Currently not supported!");
 		if(!ACCOUNTNAME.matcher(targetSkin).matches()) throw new IllegalArgumentException("This account name is invalid.");
+		if(config.PLAYER_DISGUISE_BLACKLIST.contains(targetSkin.toLowerCase(Locale.ENGLISH))) throw new IllegalArgumentException("This account name is blacklisted.");
 		
 		if(isDisguised(player)) undisguise0(player);
 
@@ -1216,45 +1223,67 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		}
 	}
 
+	private UUID retrieveProfileUID(String targetSkin) {
+		BufferedReader reader = null;
+		UUID uid = null;
+		try {
+			URL url = new URL("https://api.mojang.com/users/profiles/minecraft/" + targetSkin.toLowerCase(Locale.ENGLISH));
+			URLConnection connection = url.openConnection();
+			connection.addRequestProperty("User-Agent", getNameAndVersion().replace(' ', '/') + " (by LuisaGrether)");
+			connection.setDoOutput(true);
+			reader = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+			String response = "";
+			String line;
+			while((line = reader.readLine()) != null) {
+				response += line;
+			}
+			JSONObject jsonObject = (JSONObject)JSONValue.parse(response);
+			String id = (String)jsonObject.get("id");
+			if(!id.contains("-")) {
+				id = id.substring(0, 8) + "-" + id.substring(8, 12) + "-" + id.substring(12, 16) + "-" + id.substring(16, 20) + "-" + id.substring(20);
+			}
+			uid = UUID.fromString(id);
+		} catch(IOException e) {
+		} finally {
+			if(reader != null) {
+				try {
+					reader.close();
+				} catch(IOException e) {
+				}
+			}
+		}
+		return uid;
+	}
+
 	private void retrieveProfile(String targetSkin, @Nullable Consumer<Boolean> callback) {
 		Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-			OfflinePlayer sourcePlayer = Bukkit.getOfflinePlayer(targetSkin);
-			if(!LEGACY_PROFILES) {
-				try {
-					Object sourceProfile = OfflinePlayer_getPlayerProfile.invoke(sourcePlayer);
-					if(!CraftPlayerProfile.isInstance(sourceProfile)) {
-						sourceProfile = CraftPlayerProfile_new.newInstance(sourcePlayer.getUniqueId(), sourcePlayer.getName());
-					}
-					Object copiedProfile = null;
-					if(!((Boolean)PlayerProfile_isComplete.invoke(sourceProfile))) {
-						copiedProfile = ((CompletableFuture)PlayerProfile_update.invoke(sourceProfile)).get();
-					} else {
-						copiedProfile = PlayerProfile_clone.invoke(sourceProfile);
-					}
+			UUID uid = retrieveProfileUID(targetSkin);
+			if(uid != null) {
+				if(!LEGACY_PROFILES) {
+					try {
+						Object sourceProfile = CraftPlayerProfile_new.newInstance(uid, targetSkin);
+						sourceProfile = ((CompletableFuture)PlayerProfile_update.invoke(sourceProfile)).get();
+						
+						profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), CraftPlayerProfile_buildGameProfile.invoke(sourceProfile));
 
-					profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), CraftPlayerProfile_buildGameProfile.invoke(copiedProfile));
+						if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
+					} catch(IllegalAccessException|InvocationTargetException|InstantiationException|ExecutionException|InterruptedException e) {
+						if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+					}
+				} else {
+					try {
+						Object sourceProfile = GameProfile_new.newInstance(uid, targetSkin);
+						MinecraftSessionService_fillProfileProperties.invoke(MinecraftServer_getMinecraftSessionService.invoke(CraftServer_getServer.invoke(Bukkit.getServer())), sourceProfile, true);
+						
+						profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), sourceProfile);
 
-					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
-				} catch(IllegalAccessException|InvocationTargetException|InstantiationException|ExecutionException|InterruptedException e) {
-					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+						if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
+					} catch(IllegalAccessException|InvocationTargetException|InstantiationException e) {
+						if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
+					}
 				}
 			} else {
-				try {
-					Object sourceProfile = sourcePlayer instanceof Player ? CraftPlayer_getProfile.invoke(sourcePlayer) : CraftOfflinePlayer_profile.get(sourcePlayer);
-					if(!((Multimap)GameProfile_getProperties.invoke(sourceProfile)).containsKey("textures")) {
-						MinecraftSessionService_fillProfileProperties.invoke(MinecraftServer_getMinecraftSessionService.invoke(CraftServer_getServer.invoke(Bukkit.getServer())), sourceProfile, true);
-					}
-					Object copiedProfile = GameProfile_new.newInstance(sourcePlayer.getUniqueId(), sourcePlayer.getName());
-					Multimap sourceMap = (Multimap)GameProfile_getProperties.invoke(sourceProfile);
-					Multimap targetMap = (Multimap)GameProfile_getProperties.invoke(copiedProfile);
-					targetMap.putAll(sourceMap);
-					
-					profileDatabase.put(targetSkin.toLowerCase(Locale.ENGLISH), copiedProfile);
-
-					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(true));
-				} catch(IllegalAccessException|InvocationTargetException|InstantiationException e) {
-					if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
-				}
+				if(callback != null) Bukkit.getScheduler().runTask(iDisguise.this, () -> callback.accept(false));
 			}
 		});
 	}

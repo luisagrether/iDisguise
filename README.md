@@ -22,7 +22,7 @@ The master branch should always hold a (hopefully) bug-free recommended release 
 <dependency>
   <groupId>de.luisagrether.idisguise</groupId>
   <artifactId>idisguise</artifactId>
-  <version>6.0.1</version>
+  <version>6.0.2</version>
 </dependency>
 ````
 

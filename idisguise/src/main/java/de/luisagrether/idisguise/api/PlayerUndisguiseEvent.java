@@ -10,6 +10,7 @@ import de.luisagrether.idisguise.iDisguise;
 
 /**
  * This event is fired when a player is to be undisguised (either by command or via the API).
+ * <b>WARNING: Players are also undisguised when they leave the server. No event is called in that case.</b>
  * 
  * @since 6.0.1
  * @author LuisaGrether

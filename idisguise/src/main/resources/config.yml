@@ -2,14 +2,18 @@
 disguise:
    
    # Blacklist of disguise types:
-   # Default ones are unsupported, add anyone if you would like to disable it
+   # Default ones are unsupported, add any one if you would like to disable it
    disguise-type-blacklist: DISGUISE_TYPE_BLACKLIST
+
+   # Blacklist of player disguises:
+   # Add any player name if you would like to disable it
+   player-disguise-blacklist: PLAYER_DISGUISE_BLACKLIST
    
 # Options affecting the commands and permissions of iDisguise (these do NOT affect the developer API)
 commands:
 
    # Whitelist of statements to alter the disguises:
-   # add/remove anyone if you would like to enable/disable it
+   # add/remove any one if you would like to enable/disable it
    statement-whitelist: STATEMENT_WHITELIST
 
    # Do we use permission nodes?
