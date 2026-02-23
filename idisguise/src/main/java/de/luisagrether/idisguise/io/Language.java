@@ -86,7 +86,11 @@ public class Language {
 	public String HELP_DISGUISE_PLAYER = ChatColor.GOLD.toString() + ChatColor.BOLD + "Disguise as a player: " + ChatColor.ITALIC + "/disguise player <name>\\\\"
 							           + ChatColor.GOLD + "Example: " + ChatColor.ITALIC + "/disguise player Notch\\\\"
 							           + ChatColor.GOLD + "You can always see your own player disguise.";
-	@LastUpdated(60001)
+	@LastUpdated(60003)
+	public String HELP_DISGUISE_PLAYER_2 = ChatColor.GOLD.toString() + ChatColor.BOLD + "Disguise as a player: " + ChatColor.ITALIC + "/disguise player <name>\\\\"
+							           + ChatColor.GOLD + "Example: " + ChatColor.ITALIC + "/disguise player Notch\\\\"
+							           + ChatColor.GOLD + "You can't see your own player disguise.";
+    @LastUpdated(60001)
 	public String HELP_DISGUISE_CHECK = ChatColor.GOLD.toString() + ChatColor.BOLD + "Check your disguise: " + ChatColor.ITALIC + "/disguise\\\\"
 									  + ChatColor.GOLD + "You will be able to see your own disguise for another five\\\\"
 									  + ChatColor.GOLD + "seconds.";

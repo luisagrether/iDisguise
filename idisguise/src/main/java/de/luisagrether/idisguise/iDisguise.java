@@ -37,6 +37,7 @@ import org.bukkit.Material;
 import org.bukkit.OfflinePlayer;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
+import org.bukkit.WorldType;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Entity;
@@ -83,6 +84,7 @@ import de.luisagrether.idisguise.api.PlayerUndisguiseEvent;
 import de.luisagrether.idisguise.io.Config;
 import de.luisagrether.idisguise.io.Language;
 import de.luisagrether.idisguise.io.UpdateCheck;
+import de.luisagrether.util.ObjectUtil;
 import de.luisagrether.util.StringUtil;
 
 public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
@@ -131,6 +133,9 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	private static Constructor<?> PacketRemovePlayerInfo_new = null;
 	private static Object UpdatePlayerInfo_ADD_PLAYER = null;
 	private static Object UpdatePlayerInfo_REMOVE_PLAYER = null;
+	private static Method World_setGameRule = null;
+	private static Object GameRule_doMobSpawning = null;
+	private static Object GameRule_doMobSpawning_value = null;
 	private static boolean LEGACY_MATERIALS = false;
 	private static Method Material_createBlockData = null;
 	private static Class<?> BlockData = null;
@@ -349,6 +354,30 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 						}
 					}
 				}
+				if(PLAYER_DISGUISE_VIEWSELF) {
+					try {
+						World_setGameRule = World.class.getDeclaredMethod("setGameRuleValue", String.class, String.class);
+						GameRule_doMobSpawning = "doMobSpawning";
+						GameRule_doMobSpawning_value = "false";
+					} catch(NoSuchMethodException e) {
+						try {
+							Class<?> GameRule = Class.forName("org.bukkit.GameRule");
+							World_setGameRule = World.class.getDeclaredMethod("setGameRule", GameRule, Object.class);
+							GameRule_doMobSpawning_value = false;
+							try {
+								GameRule_doMobSpawning = GameRule.getDeclaredField("DO_MOB_SPAWNING").get(null);
+							} catch(NoSuchFieldException|IllegalAccessException e2) {
+								try {
+									GameRule_doMobSpawning = GameRule.getDeclaredField("SPAWN_MOBS").get(null);
+								} catch(NoSuchFieldException|IllegalAccessException e3) {
+									PLAYER_DISGUISE_VIEWSELF = false;
+								}
+							}
+						} catch(ClassNotFoundException|NoSuchMethodException e2) {
+							PLAYER_DISGUISE_VIEWSELF = false;
+						}
+					}
+				}
 			} catch(NoSuchFieldException|NoSuchMethodException e) {
 				e.printStackTrace();
 			}
@@ -504,11 +533,38 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 		}
 		Bukkit.getPluginManager().registerEvents(this, this);
 
-		if(PLAYER_DISGUISE_AVAILABLE && PLAYER_DISGUISE_VIEWSELF) {
-			dummyWorld = Bukkit.getWorld("iDisguise-Dummy");
+		if(PLAYER_DISGUISE_AVAILABLE && PLAYER_DISGUISE_VIEWSELF && config.PLAYER_DISGUISE_VIEWSELF) {
+			dummyWorld = Bukkit.getWorld("iDisguiseDummyWorld");
 			if(dummyWorld == null) {
-				dummyWorld = Bukkit.createWorld(WorldCreator.name("iDisguise-Dummy"));
+				dummyWorld = Bukkit.createWorld(
+					WorldCreator.name("iDisguiseDummyWorld")
+					.type(WorldType.FLAT)
+					.generateStructures(false)
+				);
+				try {
+					World_setGameRule.invoke(dummyWorld, GameRule_doMobSpawning, GameRule_doMobSpawning_value);
+				} catch(InvocationTargetException|IllegalAccessException e) {
+				}
+				dummyWorld.getWorldBorder().setCenter(dummyWorld.getSpawnLocation());
+				dummyWorld.getWorldBorder().setSize(16.0);
 			}
+		} else {
+			try {
+				/* Remove dummy world if existent */
+				File worldDir = new File(Bukkit.getWorldContainer(), "iDisguiseDummyWorld");
+				if(worldDir.isDirectory()) {
+					ObjectUtil.deleteDirectory(worldDir);
+				}
+			} catch(SecurityException e) {
+			}
+		}
+		try {
+			/* Remove old dummy world if existent */
+			File worldDir = new File(Bukkit.getWorldContainer(), "iDisguise-Dummy");
+			if(worldDir.isDirectory()) {
+				ObjectUtil.deleteDirectory(worldDir);
+			}
+		} catch(SecurityException e) {
 		}
 
 		if(config.USE_PERMISSION_NODES) {
@@ -887,7 +943,12 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 
 		if(sender instanceof Player) {
 			addHelpMessage(helpPages, language.HELP_DISGUISE_MOB);
-			if(hasPermission(sender, EntityType.PLAYER)) addHelpMessage(helpPages, language.HELP_DISGUISE_PLAYER);
+			if(hasPermission(sender, EntityType.PLAYER)) {
+				if(PLAYER_DISGUISE_VIEWSELF && config.PLAYER_DISGUISE_VIEWSELF)
+					addHelpMessage(helpPages, language.HELP_DISGUISE_PLAYER);
+				else
+					addHelpMessage(helpPages, language.HELP_DISGUISE_PLAYER_2);
+			}
 			addHelpMessage(helpPages, language.HELP_DISGUISE_CHECK);
 			addHelpMessage(helpPages, language.HELP_UNDISGUISE);
 			addHelpMessage(helpPages, language.HELP_DISGUISE_ALTER);
@@ -1192,7 +1253,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					}
 				}
 
-				if(PLAYER_DISGUISE_VIEWSELF) {
+				if(PLAYER_DISGUISE_VIEWSELF && config.PLAYER_DISGUISE_VIEWSELF) {
 					Object entityPlayer = CraftPlayer_getHandle.invoke(player);
 					if(!LEGACY_PLAYER_DISGUISE_VIEWSELF) {
 						Object PacketRemovePlayerInfo = PacketRemovePlayerInfo_new.newInstance(Arrays.asList(player.getUniqueId()));
@@ -1332,7 +1393,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					}
 				}
 
-				if(PLAYER_DISGUISE_VIEWSELF) {
+				if(PLAYER_DISGUISE_VIEWSELF && config.PLAYER_DISGUISE_VIEWSELF) {
 					Object entityPlayer = CraftPlayer_getHandle.invoke(player);
 					if(!LEGACY_PLAYER_DISGUISE_VIEWSELF) {
 						Object PacketRemovePlayerInfo = PacketRemovePlayerInfo_new.newInstance(Arrays.asList(player.getUniqueId()));

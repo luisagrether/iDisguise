@@ -8,6 +8,10 @@ disguise:
    # Blacklist of player disguises:
    # Add any player name if you would like to disable it
    player-disguise-blacklist: PLAYER_DISGUISE_BLACKLIST
+
+   # Are player disguises visible to the disguised players themselves in 3rd person view?
+   # if true: a dummy world 'iDisguiseDummyWorld' is created, which is necessary to realize this feature. 
+   player-disguise-viewself: PLAYER_DISGUISE_VIEWSELF
    
 # Options affecting the commands and permissions of iDisguise (these do NOT affect the developer API)
 commands:

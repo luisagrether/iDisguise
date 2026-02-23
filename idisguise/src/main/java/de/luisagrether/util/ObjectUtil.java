@@ -1,5 +1,6 @@
 package de.luisagrether.util;
 
+import java.io.File;
 import java.util.Collection;
 
 /**
@@ -103,6 +104,23 @@ public class ObjectUtil {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Recursively deletes a directory.
+	 * 
+	 * @param directory the directory to be deleted
+	 * @return <code>true</code> if the directory was successfully deleted
+	 */
+	public static boolean deleteDirectory(File directory) {
+		for(File child : directory.listFiles()) {
+			if(child.isFile()) {
+				child.delete();
+			} else if(child.isDirectory()) {
+				deleteDirectory(child);
+			}
+		}
+		return directory.delete();
 	}
 	
 }

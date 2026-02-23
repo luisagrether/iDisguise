@@ -22,6 +22,7 @@ public class Config {
 	/* Configuration options start here */
     public static final String DISGUISE_TYPE_BLACKLIST_PATH = "disguise.disguise-type-blacklist";
 	public static final String PLAYER_DISGUISE_BLACKLIST_PATH = "disguise.player-disguise-blacklist";
+	public static final String PLAYER_DISGUISE_VIEWSELF_PATH = "disguise.player-disguise-viewself";
     public static final String STATEMENT_WHITELIST_PATH = "commands.statement-whitelist";
 	public static final String USE_PERMISSION_NODES_PATH = "commands.use-permission-nodes";
 	public static final String UPDATE_CHECK_PATH = "updates.check";
@@ -39,6 +40,7 @@ public class Config {
 	));
 	@LastUpdated(60002)
 	public List<String> PLAYER_DISGUISE_BLACKLIST = Arrays.asList("put player name here");
+	public boolean PLAYER_DISGUISE_VIEWSELF = true;
 	@LastUpdated(60002)
 	public List<String> STATEMENT_WHITELIST = Arrays.asList(
 		"setCustomName", "setGlowing", "setFireTicks", "setFreezeTicks", "setSilent", "setAdult", "setBaby", "setVariant", "setPlayingDead", "setHasNectar",
