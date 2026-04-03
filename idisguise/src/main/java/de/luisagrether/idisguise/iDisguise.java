@@ -169,7 +169,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 			MINECRAFT_VERSION = null;
 		}
 		if(MINECRAFT_VERSION != null) {
-			if(MINECRAFT_VERSION[1] < 18) {
+			if(MINECRAFT_VERSION[0] == 1 && MINECRAFT_VERSION[1] < 18) {
 				LEGACY_INJECTION = true;
 				if(MINECRAFT_VERSION[1] >= 14) {
 					try {
@@ -221,7 +221,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 				Class<?> CraftPlayer = Class.forName(formatOBCClass("entity.CraftPlayer"));
 				CraftPlayer_getHandle = CraftPlayer.getMethod("getHandle");
 				CraftPlayer_getProfile = CraftPlayer.getMethod("getProfile");
-
+				
 				Class<?> GameProfile = null;
 				try {
 					OfflinePlayer_getPlayerProfile = OfflinePlayer.class.getDeclaredMethod("getPlayerProfile");
@@ -231,7 +231,7 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					CraftPlayerProfile_new = CraftPlayerProfile.getConstructor(UUID.class, String.class);
 					CraftPlayerProfile_buildGameProfile = CraftPlayerProfile.getDeclaredMethod("buildGameProfile");
 					GameProfile = CraftPlayerProfile_buildGameProfile.getReturnType();
-
+					
 					LEGACY_PROFILES = false;
 				} catch(NoSuchMethodException|ClassNotFoundException e) {
 					Class<?> CraftOfflinePlayer = Class.forName(formatOBCClass("CraftOfflinePlayer"));
@@ -269,11 +269,11 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 					}
 				}
 				if(GameProfile_getProperties == null) throw new NoSuchMethodException("Method GameProfile.properties() not found.");
-
+				
 				Class<?> PropertyMap = GameProfile_getProperties.getReturnType();
 				PropertyMap_properties = PropertyMap.getDeclaredField("properties");
 				PropertyMap_properties.setAccessible(true);
-				if(MINECRAFT_VERSION[0] >= 1 && (MINECRAFT_VERSION[1] >= 22 || (MINECRAFT_VERSION[1] == 21 && MINECRAFT_VERSION[2] >= 9))) {
+				if(MINECRAFT_VERSION[0] > 1 || (MINECRAFT_VERSION[0] == 1 && (MINECRAFT_VERSION[1] >= 22 || (MINECRAFT_VERSION[1] == 21 && MINECRAFT_VERSION[2] >= 9)))) {
 					Field theUnsafe = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
 					theUnsafe.setAccessible(true);
 					UNSAFE = (sun.misc.Unsafe)theUnsafe.get(null);
@@ -411,13 +411,13 @@ public class iDisguise extends JavaPlugin implements Listener, DisguiseAPI {
 	
 	public void onEnable() {
 		if(MINECRAFT_VERSION == null) {
-			getLogger().severe("This Minecraft server version is not supported!");
+			getLogger().severe("This Minecraft server version is not supported (1)!");
 			getPluginLoader().disablePlugin(this);
 			return;
 		}
 
 		if(LEGACY_INJECTION && LegacyInjector_inject == null) {
-			getLogger().severe("This Minecraft server version is not supported!");
+			getLogger().severe("This Minecraft server version is not supported (2)!");
 			getPluginLoader().disablePlugin(this);
 			return;
 		}
