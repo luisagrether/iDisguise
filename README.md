@@ -1,5 +1,5 @@
 # iDisguise
-Plugin for CraftBukkit/Spigot 1.8–1.21 and Paper/Purpur 1.18–1.21.
+Plugin for CraftBukkit/Spigot 1.8–26.1 and Paper/Purpur 1.18–1.21.
 
 ## Basic information
 This plugin allows you to turn into almost every entity that exists in Minecraft.  
@@ -22,7 +22,7 @@ The master branch should always hold a (hopefully) bug-free recommended release 
 <dependency>
   <groupId>de.luisagrether.idisguise</groupId>
   <artifactId>idisguise</artifactId>
-  <version>6.0.3</version>
+  <version>6.0.4</version>
 </dependency>
 ````
 
